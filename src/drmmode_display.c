@@ -242,7 +242,11 @@ drmmode_set_rotation(xf86CrtcPtr crtc, Rotation rotation)
 			return FALSE;
 		}
 
+#if XF86_CRTC_VERSION >= 7
+		crtc->driverIsPerformingTransform = XF86DriverTransformOutput;
+#else
 		crtc->driverIsPerformingTransform = TRUE;
+#endif
 	}
 #endif
 	return xf86CrtcRotate(crtc);
@@ -464,7 +468,7 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 		h = crtc->mode.VDisplay - crtc_y;
 	}
 
-#if XF86_CRTC_VERSION >= 4
+#if XF86_CRTC_VERSION >= 4 && XF86_CRTC_VERSION < 7
 	/* NOTE: driver is taking care of rotation in hw, which means
 	 * we need to deal w/ transformation of mouse cursor ourself:
 	 */
