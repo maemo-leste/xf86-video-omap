@@ -2,11 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.60)
-# XXX bug URL should be https://bugs.freedesktop.org/enter_bug.cgi?product=xorg
-# but this makes autoheader choke..
 AC_INIT([xf86-video-omap],
         [0.4.5],
-        [https://bugs.freedesktop.org/enter_bug.cgi],
+        [https://gitlab.freedesktop.org:xorg/driver/xf86-video-omap.git/issues],
         [xf86-video-omap])
 AC_CONFIG_SRCDIR([Makefile.am])
 AC_CONFIG_HEADERS([config.h])
