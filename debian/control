@@ -1,7 +1,7 @@
 Source: xf86-video-omap
 Section: x11
 Priority: optional
-Maintainer: Sebastian Reichel <sre@debian.org>
+Maintainer: Arthur Demchenkov <spinal.by@gmail.com>
 Build-Depends: debhelper (>= 10~),
                libdrm-dev (>= 2.4.36),
                libudev-dev,
