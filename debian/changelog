@@ -1,3 +1,15 @@
+xf86-video-omap (0.4.5.1) unstable; urgency=medium
+
+  [ Adam Jackson ]
+  * modesetting: Validate the atom for enum properties
+
+  [ Tony Lindgren ]
+  * omap: Fix missing usage count decrease in OMAPDRI2DestroyBuffer
+  * omap: Few fixes to build with musl
+  * omap: Add proper names for DSI, DPI and Virtual connectors
+
+ -- Arthur Demchenkov <spinal.by@gmail.com>  Wed, 26 Feb 2020 02:21:49 +0300
+
 xf86-video-omap (0.4.5-1) unstable; urgency=medium
 
   * New upstream release (Closes: #845331)
