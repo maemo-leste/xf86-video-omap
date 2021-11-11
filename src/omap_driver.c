@@ -1088,7 +1088,7 @@ OMAPFreeScreen(FREE_SCREEN_ARGS_DECL)
 #ifdef XSERVER_PLATFORM_BUS
 static Bool
 OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
-                   struct xf86_platform_device *dev, intptr_t match_data)
+		  struct xf86_platform_device *dev, intptr_t match_data)
 {
 	ScrnInfoPtr pScrn = NULL;
 	Bool foundScreen = FALSE;
@@ -1097,6 +1097,19 @@ OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
 
 	fd = drmOpen(NULL, busid);
 	if (fd != -1) {
+		struct omap_device *dev = omap_device_new(fd);
+		uint64_t value;
+		int res;
+
+		/* query chip-id: */
+		res = omap_get_param(dev, OMAP_PARAM_CHIPSET_ID, &value);
+		omap_device_del(dev);
+		drmClose(fd);
+
+		if (res) {
+			return FALSE;
+		}
+
 		pScrn = xf86AllocateScreen(drv, 0);
 		if (!pScrn) {
 			EARLY_ERROR_MSG("Cannot allocate a ScrnInfoPtr");
@@ -1117,8 +1130,6 @@ OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
 		pScrn->EnterVT       = OMAPEnterVT;
 		pScrn->LeaveVT       = OMAPLeaveVT;
 		pScrn->FreeScreen    = OMAPFreeScreen;
-
-		drmClose(fd);
 	}
 
 	return foundScreen;
