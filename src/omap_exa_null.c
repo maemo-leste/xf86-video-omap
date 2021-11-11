@@ -79,10 +79,11 @@ PrepareCompositeFail(int op, PicturePtr pSrcPicture, PicturePtr pMaskPicture,
 static Bool
 CloseScreen(CLOSE_SCREEN_ARGS_DECL)
 {
-#if 0 // TODO need to change CloseScreen/FreeScreen ..
+	OMAPPtr pOMAP = OMAPPTR_FROM_SCREEN(pScreen);
+
 	exaDriverFini(pScreen);
-	free(pNv->EXADriverPtr);
-#endif
+	free(pOMAP->pOMAPEXA);
+
 	return TRUE;
 }
 
@@ -90,7 +91,6 @@ static void
 FreeScreen(FREE_SCREEN_ARGS_DECL)
 {
 }
-
 
 OMAPEXAPtr
 InitNullEXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)

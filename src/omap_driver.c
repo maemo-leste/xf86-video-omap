@@ -909,6 +909,8 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 		if (pOMAP->pOMAPEXA->CloseScreen) {
 			pOMAP->pOMAPEXA->CloseScreen(CLOSE_SCREEN_ARGS);
 		}
+
+		pOMAP->pOMAPEXA = NULL;
 	}
 
 	if (pOMAP->dri) {
@@ -1074,6 +1076,7 @@ OMAPFreeScreen(FREE_SCREEN_ARGS_DECL)
 			pOMAP->pOMAPEXA->FreeScreen(FREE_SCREEN_ARGS(pScrn));
 		}
 		free(pOMAP->pOMAPEXA);
+		pOMAP->pOMAPEXA = NULL;
 	}
 
 	omap_device_del(pOMAP->dev);
