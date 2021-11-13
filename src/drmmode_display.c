@@ -1570,3 +1570,22 @@ drmmode_screen_fini(ScrnInfoPtr pScrn)
 
 	drmmode_uevent_fini(pScrn);
 }
+
+_X_EXPORT void
+drmmode_gbm_flush_scanout(ScrnInfoPtr pScrn)
+{
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
+	drmmode_crtc_private_ptr crtc = config->crtc[0]->driver_private;
+	drmmode_ptr mode = crtc->drmmode;
+	int i;
+
+	for (i = 0; i < config->num_crtc; i++) {
+		crtc = config->crtc[i]->driver_private;
+
+		if (!config->crtc[i]->enabled)
+			continue;
+
+		drmModePageFlip(mode->fd, crtc->mode_crtc->crtc_id, mode->fb_id,
+				0, NULL);
+	}
+}

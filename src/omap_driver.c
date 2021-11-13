@@ -1098,20 +1098,12 @@ OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
 	char *busid = xf86_get_platform_device_attrib(dev, ODEV_ATTRIB_BUSID);
 	int fd;
 
+	if (strncmp(busid, "omapdrm", 7))
+		return FALSE;
+
 	fd = drmOpen(NULL, busid);
 	if (fd != -1) {
-		struct omap_device *dev = omap_device_new(fd);
-		uint64_t value;
-		int res;
-
-		/* query chip-id: */
-		res = omap_get_param(dev, OMAP_PARAM_CHIPSET_ID, &value);
-		omap_device_del(dev);
 		drmClose(fd);
-
-		if (res) {
-			return FALSE;
-		}
 
 		pScrn = xf86AllocateScreen(drv, 0);
 		if (!pScrn) {

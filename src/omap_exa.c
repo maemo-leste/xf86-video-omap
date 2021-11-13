@@ -276,6 +276,8 @@ _X_EXPORT void
 OMAPFinishAccess(PixmapPtr pPixmap, int index)
 {
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
 
 	pPixmap->devPrivate.ptr = NULL;
 
@@ -284,6 +286,9 @@ OMAPFinishAccess(PixmapPtr pPixmap, int index)
 	 * do a more precise cache flush..
 	 */
 	omap_bo_cpu_fini(priv->bo, idx2op(index));
+
+	if (priv->bo == pOMAP->scanout)
+		drmmode_gbm_flush_scanout(pScrn);
 }
 
 /**

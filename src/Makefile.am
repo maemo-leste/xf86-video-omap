@@ -34,22 +34,38 @@ ERROR_CFLAGS = -Werror -Wall -Wdeclaration-after-statement -Wvla \
 	-Wwrite-strings -Wformat-nonliteral  -Wformat-security \
 	-Wold-style-definition -Winit-self -Wmissing-include-dirs \
 	-Waddress -Waggregate-return -Wno-multichar -Wnested-externs
- 
-AM_CFLAGS = @XORG_CFLAGS@ $(ERROR_CFLAGS)
+
 omap_drv_la_LTLIBRARIES = omap_drv.la
+
+omap_drv_la_CFLAGS = @XORG_CFLAGS@ $(ERROR_CFLAGS)
 omap_drv_la_LDFLAGS = -module -avoid-version -no-undefined
 omap_drv_la_LIBADD = @XORG_LIBS@
 omap_drv_ladir = @moduledir@/drivers
 
 omap_drv_la_SOURCES = \
-         drmmode_display.c \
-         omap_exa.c \
-         omap_exa.h \
-         omap_exa_null.c \
-         omap_exa_utils.c \
-         omap_xv.c \
-         omap_dri2.c \
-         omap_driver.c \
-         omap_driver.h \
-         omap_util.h \
-         compat-api.h
+	drmmode_display.c \
+	omap_exa.c \
+	omap_exa.h \
+	omap_exa_null.c \
+	omap_exa_utils.c \
+	omap_xv.c \
+	omap_dri2.c \
+	omap_driver.c \
+	omap_driver.h \
+	omap_util.h \
+	compat-api.h
+
+PVR_CFLAGS = -I./pvr -I./pvr/include4 -I./pvr/hwdefs \
+	-DLINUX -DSGX540 -DSUPPORT_DMABUF
+
+omap_pvr_drv_la_LTLIBRARIES = omap_pvr_drv.la
+
+omap_pvr_drv_la_CFLAGS = @XORG_CFLAGS@ $(ERROR_CFLAGS) $(PVR_CFLAGS)
+omap_pvr_drv_la_LDFLAGS = -module -avoid-version -no-undefined
+omap_pvr_drv_la_LIBADD = @XORG_LIBS@ -lsrv_um -lpvr2d
+omap_pvr_drv_ladir = @moduledir@
+
+omap_pvr_drv_la_SOURCES = \
+	pvrhelpers.c \
+	omap_pvr_use.c \
+	omap_exa_pvr.c

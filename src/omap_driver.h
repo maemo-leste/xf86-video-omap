@@ -242,7 +242,7 @@ Bool drmmode_cursor_init(ScreenPtr pScreen);
 Bool drmmode_is_rotated(ScrnInfoPtr pScrn);
 Bool drmmode_reallocate_scanout(ScrnInfoPtr pScrn, Bool redraw,
 		xf86CrtcPtr crtc);
-
+void drmmode_gbm_flush_scanout(ScrnInfoPtr pScrn);
 
 /**
  * DRI2 functions..
