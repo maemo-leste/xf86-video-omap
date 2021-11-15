@@ -55,14 +55,13 @@ omap_drv_la_SOURCES = \
 	omap_util.h \
 	compat-api.h
 
-PVR_CFLAGS = -I./pvr -I./pvr/include4 -I./pvr/hwdefs \
-	-DLINUX -DSGX540 -DSUPPORT_DMABUF
+PVR_CFLAGS = @PVRSGX_CFLAGS@ -DLINUX -DSGX540 -DSUPPORT_DMABUF
 
 omap_pvr_drv_la_LTLIBRARIES = omap_pvr_drv.la
 
 omap_pvr_drv_la_CFLAGS = @XORG_CFLAGS@ $(ERROR_CFLAGS) $(PVR_CFLAGS)
 omap_pvr_drv_la_LDFLAGS = -module -avoid-version -no-undefined
-omap_pvr_drv_la_LIBADD = @XORG_LIBS@ -lsrv_um -lpvr2d
++omap_pvr_drv_la_LIBADD = @XORG_LIBS@ @PVRSGX_LIBS@
 omap_pvr_drv_ladir = @moduledir@
 
 omap_pvr_drv_la_SOURCES = \

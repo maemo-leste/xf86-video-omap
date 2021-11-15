@@ -1,7 +1,7 @@
 Source: xf86-video-omap
 Section: droid4
 Priority: optional
-Maintainer: Arthur Demchenkov <spinal.by@gmail.com>
+Maintainer: Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>
 Build-Depends: debhelper (>= 10~),
                libdrm-dev (>= 2.4.36),
                libudev-dev,
@@ -12,18 +12,20 @@ Build-Depends: debhelper (>= 10~),
                x11proto-gl-dev,
                x11proto-xf86dri-dev,
                xutils-dev,
-               xserver-xorg-dev (>= 2:1.9.4)
+               xserver-xorg-dev (>= 2:1.9.4),
+               sgx-ddk-um-dev-1.17.4948957,
 Standards-Version: 3.9.8
 Vcs-Git: https://anonscm.debian.org/cgit/collab-maint/xf86-video-omap.git
 Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/xf86-video-omap.git
 
 
 Package: xserver-xorg-video-omap
-Architecture: armel armhf
+Architecture: armhf
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
          ${shlibs:Depends},
-         ${xviddriver:Depends}
+         ${xviddriver:Depends},
+         sgx-ddk-um-libs
 Provides: ${xviddriver:Provides}
 Description: X.Org X server -- OMAP display driver
  This driver for the X.Org X server (see xserver-xorg for a further
