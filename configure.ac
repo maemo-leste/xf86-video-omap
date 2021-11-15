@@ -45,6 +45,8 @@ XORG_DRIVER_CHECK_EXT(DPMSExtension, xextproto)
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.3] xproto fontsproto [libdrm >= 2.4.36] libdrm_omap xf86driproto $REQUIRED_MODULES)
 sdkdir=$(pkg-config --variable=sdkdir xorg-server)
 
+PKG_CHECK_MODULES(PVRSGX, sgx-ddk-um $REQUIRED_MODULES)
+
 # Checks for header files.
 AC_HEADER_STDC
 

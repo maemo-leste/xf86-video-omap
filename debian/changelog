@@ -1,3 +1,9 @@
+xf86-video-omap (0.5.0.1) unstable; urgency=medium
+
+  * Add EXA implementation for SGX DDK 1.17.4948957
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Mon, 22 Nov 2021 14:50:21 +0100
+
 xf86-video-omap (0.4.5.1) unstable; urgency=medium
 
   [ Adam Jackson ]
