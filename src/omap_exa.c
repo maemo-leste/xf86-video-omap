@@ -255,10 +255,12 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	 * first CPU access is READ and second is WRITE).
 	 */
 
+	/* In recent kernels init/fini ops are noop */
+#if 0
 	if (omap_bo_cpu_prep(priv->bo, idx2op(index))) {
 		return FALSE;
 	}
-
+#endif
 	return TRUE;
 }
 
@@ -285,8 +287,10 @@ OMAPFinishAccess(PixmapPtr pPixmap, int index)
 	 * buffer was accessed by sw, and pass that info down to kernel to
 	 * do a more precise cache flush..
 	 */
-	omap_bo_cpu_fini(priv->bo, idx2op(index));
 
+#if 0
+	omap_bo_cpu_fini(priv->bo, idx2op(index));
+#endif
 	if (priv->bo == pOMAP->scanout)
 		drmmode_gbm_flush_scanout(pScrn);
 }
