@@ -154,7 +154,12 @@ typedef struct PVRRenderOp_TAG
 
 typedef struct PVRCopyOp_TAG
 {
-	PVR2D_3DBLT blt3D;
+	union
+	{
+		PVR2DBLTINFO blt2D;
+		PVR2D_3DBLT blt3D;
+	};
+
 	PVRRenderOp renderOp;
 } PVRCopyOp, *PPVRCopyOp;
 

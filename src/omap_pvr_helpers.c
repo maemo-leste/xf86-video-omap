@@ -1,5 +1,5 @@
 /*
- * pvrhelpers.c
+ * omap_pvr_helpers.c
  *
  * Copyright (C) 2021 Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>
  *
@@ -28,7 +28,7 @@
 #include "omap_driver.h"
 #include "omap_exa_pvr.h"
 
-#include "pvrhelpers.h"
+#include "omap_pvr_helpers.h"
 
 static PVRSERVICES gsSrv;
 static unsigned int guiSrvRefCount;
@@ -190,52 +190,6 @@ DeInitialiseServices(ScreenPtr pScreen, PPVRSERVICES pSrv)
 	}
 }
 
-static inline bool
-unsigned_greater_equal(unsigned a, unsigned b)
-{
-	return (a - b) < INT_MAX;
-}
-
-/*
- * Wait for GPU ops to complete
- */
-void
-WaitForOpsComplete(const PPVRSERVICES pSrv,
-		   PPVR2DMEMINFO meminfo)
-{
-	PPVRSRV_CLIENT_MEM_INFO psClientMemInfo =
-			(PPVRSRV_CLIENT_MEM_INFO)meminfo->hPrivateData;
-	const PVRSRV_CLIENT_SYNC_INFO *sync_info =
-			psClientMemInfo->psClientSyncInfo;
-	PVRSRV_SYNC_DATA *sync = sync_info->psSyncData;
-
-	if (sync) {
-		const IMG_UINT32 wops_pending = sync->ui32WriteOpsPending;
-		const IMG_UINT32 rops_pending = sync->ui32ReadOpsPending;
-		const IMG_UINT32 rops2_pending = sync->ui32ReadOps2Pending;
-
-		int loops = 0;
-
-		for (;;)
-		{
-			IMG_UINT32 wops_complete = sync->ui32WriteOpsComplete;
-			IMG_UINT32 rops_complete = sync->ui32ReadOpsComplete;
-			IMG_UINT32 rops2_complete = sync->ui32ReadOps2Complete;
-
-			if (unsigned_greater_equal(wops_complete, wops_pending) &&
-			    unsigned_greater_equal(rops_complete, rops_pending) &&
-			    unsigned_greater_equal(rops2_complete, rops2_pending))
-			{
-				break;
-			}
-
-			loops++;
-			PVRSRVEventObjectWait(pSrv->services,
-					      pSrv->misc_info.hOSGlobalEvent);
-		}
-	}
-}
-
 IMG_BOOL
 PVRMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, struct omap_bo *bo,
 	 PPVR2DMEMINFO meminfo)
@@ -279,8 +233,6 @@ PVRUnMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, PPVR2DMEMINFO meminfo)
 	DEBUG_MSG("unmapping BO %p", meminfo);
 
 	psClientMemInfo = (PPVRSRV_CLIENT_MEM_INFO)meminfo->hPrivateData;
-	WaitForOpsComplete(pSrv, meminfo);
-
 	err = PVRSRVUnmapDmaBuf(&pSrv->dev_data, psClientMemInfo);
 
 	if (err != PVRSRV_OK) {

@@ -27,7 +27,7 @@
 #include "omap_exa.h"
 
 #include "omap_exa_pvr.h"
-#include "pvrhelpers.h"
+#include "omap_pvr_helpers.h"
 #include "omap_pvr_use.h"
 
 #define OP(op) {op, ARRAY_SIZE(op), NULL}

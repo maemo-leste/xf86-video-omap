@@ -66,6 +66,6 @@ omap_pvr_drv_la_LIBADD = @XORG_LIBS@ -lsrv_um -lpvr2d
 omap_pvr_drv_ladir = @moduledir@
 
 omap_pvr_drv_la_SOURCES = \
-	pvrhelpers.c \
+	omap_pvr_helpers.c \
 	omap_pvr_use.c \
 	omap_exa_pvr.c

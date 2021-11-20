@@ -30,11 +30,16 @@
 #include "omap_exa.h"
 
 #include "omap_exa_pvr.h"
-#include "pvrhelpers.h"
+#include "omap_pvr_helpers.h"
 #include "omap_pvr_use.h"
 
 static PVRSolidOp gsSolidOp;
 static PVRCopyOp gsCopy2DOp;
+
+static Bool copy2d(int bitsPerPixel)
+{
+	return bitsPerPixel != 8;
+}
 
 static unsigned char sgxRop[2][16] =
 {
@@ -75,7 +80,6 @@ static unsigned char sgxRop[2][16] =
 		PVR2DROPset
 	}
 };
-
 
 static inline PVRPtr
 PVREXAPTR(ScrnInfoPtr pScrn)
@@ -130,6 +134,27 @@ GetFormats(unsigned int *formats)
 	formats[i++] = fourcc_code('Y', 'U', 'Y', '2');
 
 	return i;
+}
+
+static void waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap)
+{
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+	PVRPtr pPVR = PVREXAPTR(pScrn);
+	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
+	PrivPixmapPtr pvrPixmapPriv = pixmapPriv->priv;
+	PVR2DERROR err;
+
+	do
+	{
+		err = PVR2DQueryBlitsComplete(pPVR->srv->hPVR2DContext,
+					      &pvrPixmapPriv->meminfo, 1);
+		if (err)
+		{
+			ERROR_MSG("%s: PVR2DQueryBlitsComplete failed with error code: %d (%s)",
+				  __func__, err, sgxErrorCodeToString(err));
+		}
+	}
+	while (err == PVR2DERROR_BLT_NOTCOMPLETE);
 }
 
 static void
@@ -496,12 +521,14 @@ sgxPrepareSolid(PixmapPtr pPixmap, int alu, Pixel planemask, Pixel fill_colour)
 	if (bitsPerPixel == 16 || bitsPerPixel == 32) {
 		gsSolidOp.solid2D.ColourKey = 0;
 		gsSolidOp.solid2D.CopyCode = sgxRop[1][alu];
+
 		gsSolidOp.solid2D.pSrcMemInfo = 0;
 		gsSolidOp.solid2D.SrcOffset = 0;
 		gsSolidOp.solid2D.SrcStride = 0;
 		gsSolidOp.solid2D.SrcX = 0;
 		gsSolidOp.solid2D.SrcY = 0;
 		gsSolidOp.solid2D.SrcFormat = PVR2D_ARGB8888;
+
 		gsSolidOp.solid2D.pDstMemInfo = &pvrPixmapPriv->meminfo;
 		gsSolidOp.solid2D.DstStride = exaGetPixmapPitch(pPixmap);
 		gsSolidOp.solid2D.DstSurfWidth = pPixmap->drawable.width;
@@ -667,17 +694,35 @@ sgxDoneSolid(PixmapPtr pPixmap)
 {
 	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
-	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
-	PrivPixmapPtr pvrPixmapPriv = pixmapPriv->priv;
 
 	PVR_ASSERT(gsSolidOp.pPixmap == pPixmap);
 
 	sgxSolidNextBatch(pScrn, pPVR, TRUE);
+
+	waitForBlitsCompleteOnDeviceMem(pPixmap);
+
 	gsSolidOp.softFallback.psGC = NULL;
 	gsSolidOp.pPixmap = NULL;
+}
 
-	WaitForOpsComplete(pPVR->srv, &pvrPixmapPriv->meminfo);
-	drmmode_gbm_flush_scanout(pScrn);
+static PVR2DFORMAT
+convertBitsPerPixelToPVR2DFormat(int bitsPerPixel)
+{
+	switch (bitsPerPixel)
+	{
+		case 1:
+			return PVR2D_1BPP;
+		case 8:
+			return PVR2D_ALPHA8;
+		case 16:
+			return PVR2D_RGB565;
+		case 24:
+			return PVR2D_RGB888;
+		case 32:
+			return PVR2D_ARGB8888;
+		default:
+			return  -1;
+	}
 }
 
 static Bool
@@ -685,7 +730,6 @@ sgxPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int xdir, int ydir, int alu,
 	       Pixel planemask)
 {
 	int bitsPerPixel = pSrc->drawable.bitsPerPixel;
-	ScrnInfoPtr pScrn = pix2scrn(pDst);
 	OMAPPixmapPrivPtr dstPriv;
 	OMAPPixmapPrivPtr srcPriv;
 	PrivPixmapPtr pvrDstPriv;
@@ -702,63 +746,60 @@ sgxPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int xdir, int ydir, int alu,
 
 	dstPriv = exaGetPixmapDriverPrivate(pDst);
 	pvrDstPriv = sgxMapPixmapBo(pDst->drawable.pScreen, dstPriv);
-	gsCopy2DOp.blt3D.sDst.pSurfMemInfo = &pvrDstPriv->meminfo;
-	gsCopy2DOp.blt3D.sDst.SurfWidth = pDst->drawable.width;
-	gsCopy2DOp.blt3D.sDst.SurfHeight = pDst->drawable.height;
-	gsCopy2DOp.blt3D.sDst.Stride = exaGetPixmapPitch(pDst);
-
-
 	srcPriv = exaGetPixmapDriverPrivate(pSrc);
 	pvrSrcPriv = sgxMapPixmapBo(pSrc->drawable.pScreen, srcPriv);
 
-	gsCopy2DOp.blt3D.sSrc.pSurfMemInfo = &pvrSrcPriv->meminfo;
-	gsCopy2DOp.blt3D.sSrc.SurfWidth = pSrc->drawable.width;
-	gsCopy2DOp.blt3D.sSrc.SurfHeight = pSrc->drawable.height;
-	gsCopy2DOp.blt3D.sSrc.Stride = exaGetPixmapPitch(pSrc);
+	if (copy2d(bitsPerPixel)) {
+		gsCopy2DOp.blt2D.ColourKey = 0;
+		gsCopy2DOp.blt2D.CopyCode = sgxRop[0][alu];
 
-	if (gsCopy2DOp.blt3D.sSrc.pSurfMemInfo &&
-	    gsCopy2DOp.blt3D.sDst.pSurfMemInfo)
-	{
-		switch (bitsPerPixel)
-		{
-			case 8:
-				gsCopy2DOp.blt3D.sSrc.Format = PVR2D_ALPHA8;
-				gsCopy2DOp.blt3D.sDst.Format = PVR2D_ALPHA8;
-				break;
-			case 16:
-				gsCopy2DOp.blt3D.sSrc.Format = PVR2D_RGB565;
-				gsCopy2DOp.blt3D.sDst.Format = PVR2D_RGB565;
-				break;
-			case 24:
-				gsCopy2DOp.blt3D.sSrc.Format = PVR2D_RGB888;
-				gsCopy2DOp.blt3D.sDst.Format = PVR2D_RGB888;
-				break;
-			case 32:
-				gsCopy2DOp.blt3D.sSrc.Format = PVR2D_ARGB8888;
-				gsCopy2DOp.blt3D.sDst.Format = PVR2D_ARGB8888;
-				break;
-			default:
-				gsCopy2DOp.blt3D.sSrc.Format = -1;
-				gsCopy2DOp.blt3D.sDst.Format = -1;
-				break;
-		}
+		gsCopy2DOp.blt2D.SrcFormat =
+				convertBitsPerPixelToPVR2DFormat(
+					pSrc->drawable.bitsPerPixel);
+		gsCopy2DOp.blt2D.pSrcMemInfo = &pvrSrcPriv->meminfo;
+		gsCopy2DOp.blt2D.SrcStride = exaGetPixmapPitch(pSrc);
+		gsCopy2DOp.blt2D.SrcSurfWidth = pSrc->drawable.width;
+		gsCopy2DOp.blt2D.SrcSurfHeight = pSrc->drawable.height;
+
+		gsCopy2DOp.blt2D.DstFormat =
+				convertBitsPerPixelToPVR2DFormat(
+					pDst->drawable.bitsPerPixel);
+		gsCopy2DOp.blt2D.pDstMemInfo = &pvrDstPriv->meminfo;
+		gsCopy2DOp.blt2D.DstStride = exaGetPixmapPitch(pDst);
+		gsCopy2DOp.blt2D.DstSurfWidth = pDst->drawable.width;
+		gsCopy2DOp.blt2D.DstSurfHeight = pDst->drawable.height;
+
+		gsCopy2DOp.blt2D.pMaskMemInfo = NULL;
+		gsCopy2DOp.blt2D.BlitFlags = PVR2D_BLIT_DISABLE_ALL;
+	} else {
+		gsCopy2DOp.blt3D.sSrc.Format =
+				convertBitsPerPixelToPVR2DFormat(
+					pSrc->drawable.bitsPerPixel);
+		gsCopy2DOp.blt3D.sSrc.pSurfMemInfo = &pvrSrcPriv->meminfo;
+		gsCopy2DOp.blt3D.sSrc.SurfWidth = pSrc->drawable.width;
+		gsCopy2DOp.blt3D.sSrc.SurfHeight = pSrc->drawable.height;
+		gsCopy2DOp.blt3D.sSrc.Stride = exaGetPixmapPitch(pSrc);
+
+		gsCopy2DOp.blt3D.sDst.pSurfMemInfo = &pvrDstPriv->meminfo;
+		gsCopy2DOp.blt3D.sDst.SurfWidth = pDst->drawable.width;
+		gsCopy2DOp.blt3D.sDst.SurfHeight = pDst->drawable.height;
+		gsCopy2DOp.blt3D.sDst.Stride = exaGetPixmapPitch(pDst);
+		gsCopy2DOp.blt3D.sDst.Format =
+				convertBitsPerPixelToPVR2DFormat(
+					pDst->drawable.bitsPerPixel);
 
 		gsCopy2DOp.blt3D.UseParams[0] = 0;
 		gsCopy2DOp.blt3D.UseParams[1] = 0;
 		gsCopy2DOp.blt3D.hUseCode = PVRGetUseCodeCopyAlphaFill();
-
-		gsCopy2DOp.renderOp.pSrc = pSrc;
-		gsCopy2DOp.renderOp.pDest = pDst;
-		gsCopy2DOp.renderOp.handleDestDamage = 0;
-		sgxCompositeResetCoordinates(&gsCopy2DOp.renderOp);
-
-		return TRUE;
-	}
-	else {
-		ERROR_MSG("%s: unaccel buffer", __func__);
 	}
 
-	return FALSE;
+	gsCopy2DOp.renderOp.pSrc = pSrc;
+	gsCopy2DOp.renderOp.pDest = pDst;
+	gsCopy2DOp.renderOp.handleDestDamage = 0;
+
+	sgxCompositeResetCoordinates(&gsCopy2DOp.renderOp);
+
+	return TRUE;
 }
 
 static void
@@ -767,6 +808,7 @@ sgxCopyNextBatch(ScreenPtr pScreen, Bool flush)
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
 	int i;
+	int bitsPerPixel;
 
 	if (flush) {
 		if (!gsCopy2DOp.renderOp.numBltRects) {
@@ -780,6 +822,9 @@ sgxCopyNextBatch(ScreenPtr pScreen, Bool flush)
 	if (!sgxCompositeValidateBoundingBox(&gsCopy2DOp.renderOp)) {
 		return;
 	}
+
+	bitsPerPixel= gsCopy2DOp.renderOp.pSrc->drawable.bitsPerPixel;
+
 	for (i = 0; i < gsCopy2DOp.renderOp.numBltRects; i++)
 	{
 		SGXHW_RENDER_RECTS *psSrcRect =
@@ -788,23 +833,53 @@ sgxCopyNextBatch(ScreenPtr pScreen, Bool flush)
 				&gsCopy2DOp.renderOp.bltRects.destRect[i];
 		PVR2DERROR iErr;
 
-		gsCopy2DOp.blt3D.rcSource.left = psSrcRect->x0;
-		gsCopy2DOp.blt3D.rcSource.top = psSrcRect->y0;
-		gsCopy2DOp.blt3D.rcSource.right = psSrcRect->x1;
-		gsCopy2DOp.blt3D.rcSource.bottom = psSrcRect->y1;
+		if (copy2d(bitsPerPixel)) {
+			gsCopy2DOp.blt2D.SrcX = psSrcRect->x0;
+			gsCopy2DOp.blt2D.SrcY = psSrcRect->y0;
+			gsCopy2DOp.blt2D.SizeX =
+					psSrcRect->x1 - psSrcRect->x0;
+			gsCopy2DOp.blt2D.SizeY =
+					psSrcRect->y1 - psSrcRect->y0;
 
-		gsCopy2DOp.blt3D.rcDest.left = psDstRect->x0;
-		gsCopy2DOp.blt3D.rcDest.top = psDstRect->y0;
-		gsCopy2DOp.blt3D.rcDest.right = psDstRect->x1;
-		gsCopy2DOp.blt3D.rcDest.bottom = psDstRect->y1;
+			gsCopy2DOp.blt2D.DstX = psDstRect->x0;
+			gsCopy2DOp.blt2D.DstY = psDstRect->y0;
+			gsCopy2DOp.blt2D.DSizeX =
+					psDstRect->x1 - psDstRect->x0;
+			gsCopy2DOp.blt2D.DSizeY =
+					psDstRect->y1 - psDstRect->y0;
 
-		iErr = PVR2DBlt3D(pPVR->srv->hPVR2DContext, &gsCopy2DOp.blt3D);
+			iErr = PVR2DBlt(pPVR->srv->hPVR2DContext,
+					&gsCopy2DOp.blt2D);
 
-		if (iErr != PVR2D_OK)
-		{
-			ERROR_MSG("%s: PVR3DBltExt failed with error code: %d (%s)",
-			       __func__, iErr, sgxErrorCodeToString(iErr));
-			break;
+			if (iErr != PVR2D_OK)
+			{
+				ERROR_MSG("%s: PVR2DBlt failed with error code: %d (%s)",
+					  __func__, iErr,
+					  sgxErrorCodeToString(iErr));
+				break;
+			}
+
+		} else {
+			gsCopy2DOp.blt3D.rcSource.left = psSrcRect->x0;
+			gsCopy2DOp.blt3D.rcSource.top = psSrcRect->y0;
+			gsCopy2DOp.blt3D.rcSource.right = psSrcRect->x1;
+			gsCopy2DOp.blt3D.rcSource.bottom = psSrcRect->y1;
+
+			gsCopy2DOp.blt3D.rcDest.left = psDstRect->x0;
+			gsCopy2DOp.blt3D.rcDest.top = psDstRect->y0;
+			gsCopy2DOp.blt3D.rcDest.right = psDstRect->x1;
+			gsCopy2DOp.blt3D.rcDest.bottom = psDstRect->y1;
+
+			iErr = PVR2DBlt3D(pPVR->srv->hPVR2DContext,
+					  &gsCopy2DOp.blt3D);
+
+			if (iErr != PVR2D_OK)
+			{
+				ERROR_MSG("%s: PVR3DBltExt failed with error code: %d (%s)",
+					  __func__, iErr,
+					  sgxErrorCodeToString(iErr));
+				break;
+			}
 		}
 	}
 
@@ -882,18 +957,14 @@ sgxCopy(PixmapPtr pDstPixmap, int srcX, int srcY, int dstX, int dstY,
 static void
 sgxDoneCopy(PixmapPtr pPixmap)
 {
-	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
-	PVRPtr pPVR = PVREXAPTR(pScrn);
-	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
-	PrivPixmapPtr pvrPixmapPriv = pixmapPriv->priv;
-
 	PVR_ASSERT(gsCopy2DOp.renderOp.pDest == pPixmap);
 
 	sgxCopyNextBatch(pPixmap->drawable.pScreen, TRUE);
+
+	waitForBlitsCompleteOnDeviceMem(pPixmap);
+
 	gsCopy2DOp.renderOp.pSrc = NULL;
 	gsCopy2DOp.renderOp.pDest = NULL;
-	WaitForOpsComplete(pPVR->srv, &pvrPixmapPriv->meminfo);
-	drmmode_gbm_flush_scanout(pScrn);
 }
 
 static Bool
