@@ -713,6 +713,7 @@ sgxDoneSolid(PixmapPtr pPixmap)
 
 	gsSolidOp.softFallback.psGC = NULL;
 	gsSolidOp.pPixmap = NULL;
+	drmmode_flush_scanout(pScrn);
 }
 
 static PVR2DFORMAT
@@ -967,6 +968,8 @@ sgxCopy(PixmapPtr pDstPixmap, int srcX, int srcY, int dstX, int dstY,
 static void
 sgxDoneCopy(PixmapPtr pPixmap)
 {
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+
 	PVR_ASSERT(gsCopy2DOp.renderOp.pDest == pPixmap);
 
 	sgxCopyNextBatch(pPixmap->drawable.pScreen, TRUE);
@@ -975,6 +978,7 @@ sgxDoneCopy(PixmapPtr pPixmap)
 
 	gsCopy2DOp.renderOp.pSrc = NULL;
 	gsCopy2DOp.renderOp.pDest = NULL;
+	drmmode_flush_scanout(pScrn);
 }
 
 static Bool
