@@ -343,6 +343,12 @@ OMAPDRI2CopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	DrawablePtr pSrcDraw = dri2draw(pDraw, pSrcBuffer);
 	DrawablePtr pDstDraw = dri2draw(pDraw, pDstBuffer);
+	PixmapPtr pDstPixmap = OMAPBUF(pDstBuffer)->pPixmap;
+	OMAPPixmapPrivPtr pDstPixmapPriv =
+			exaGetPixmapDriverPrivate(pDstPixmap);
+	ScrnInfoPtr pDstScrn = pix2scrn(pDstPixmap);
+	OMAPPtr pOMAP = OMAPPTR(pDstScrn);
+
 	RegionPtr pCopyClip;
 	GCPtr pGC;
 
@@ -371,6 +377,10 @@ OMAPDRI2CopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
 			0, 0, pDraw->width, pDraw->height, 0, 0);
 
 	FreeScratchGC(pGC);
+
+	if (pDstPixmapPriv->bo == pOMAP->scanout) {
+		drmmode_flush_scanout(pDstScrn);
+	}
 }
 
 /**

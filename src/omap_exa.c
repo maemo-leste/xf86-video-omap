@@ -292,7 +292,7 @@ OMAPFinishAccess(PixmapPtr pPixmap, int index)
 	omap_bo_cpu_fini(priv->bo, idx2op(index));
 #endif
 	if (priv->bo == pOMAP->scanout)
-		drmmode_gbm_flush_scanout(pScrn);
+		drmmode_flush_scanout(pScrn);
 }
 
 /**

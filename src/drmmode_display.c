@@ -1574,7 +1574,7 @@ drmmode_screen_fini(ScrnInfoPtr pScrn)
 }
 
 _X_EXPORT void
-drmmode_gbm_flush_scanout(ScrnInfoPtr pScrn)
+drmmode_flush_scanout(ScrnInfoPtr pScrn)
 {
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
 	drmmode_crtc_private_ptr crtc = config->crtc[0]->driver_private;
