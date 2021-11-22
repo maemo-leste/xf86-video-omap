@@ -520,6 +520,7 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 		if (pPriv->cmd) {
 			/* dispatch queued flip: */
 			OMAPDRISwapCmd *cmd = pPriv->cmd;
+
 			pPriv->cmd = NULL;
 			OMAPDRI2SwapDispatch(pDraw, cmd);
 		}
@@ -669,4 +670,13 @@ OMAPDRI2CloseScreen(ScreenPtr pScreen)
 		drmmode_wait_for_event(pScrn);
 	}
 	DRI2CloseScreen(pScreen);
+}
+
+/**
+ * Do whatever needed on pixmap to make it ready for page flip
+ */
+void
+OMAPDRI2FlipPrepare(PixmapPtr pPixmap)
+{
+	OMAPFlipPrepare(pPixmap);
 }

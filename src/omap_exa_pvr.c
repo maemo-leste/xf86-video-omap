@@ -136,13 +136,21 @@ GetFormats(unsigned int *formats)
 	return i;
 }
 
-static void waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap)
+static void
+sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
+static PrivPixmapPtr
+sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
+
+static void
+waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap)
 {
 	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
 	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
-	PrivPixmapPtr pvrPixmapPriv = pixmapPriv->priv;
+	PrivPixmapPtr pvrPixmapPriv;
 	PVR2DERROR err;
+
+	pvrPixmapPriv = sgxMapPixmapBo(pPixmap->drawable.pScreen, pixmapPriv);
 
 	do
 	{
@@ -1006,6 +1014,12 @@ sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 
 }
 
+static void
+sgxFlipPrepare(PixmapPtr pPixmap)
+{
+	waitForBlitsCompleteOnDeviceMem(pPixmap);
+}
+
 _X_EXPORT OMAPEXAPtr
 InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 {
@@ -1078,6 +1092,7 @@ InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 //	omap_exa->PutTextureImage = PutTextureImage;
 	omap_exa->CloseScreen = CloseScreen;
 	omap_exa->FreeScreen = FreeScreen;
+	omap_exa->FlipPrepare = sgxFlipPrepare;
 
 	return omap_exa;
 

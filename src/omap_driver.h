@@ -251,6 +251,17 @@ typedef struct _OMAPDRISwapCmd OMAPDRISwapCmd;
 Bool OMAPDRI2ScreenInit(ScreenPtr pScreen);
 void OMAPDRI2CloseScreen(ScreenPtr pScreen);
 void OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd);
+void OMAPDRI2FlipPrepare(PixmapPtr pPixmap);
+
+static inline void OMAPFlipPrepare(PixmapPtr pPixmap)
+{
+	OMAPPtr pOMAP = OMAPPTR(pix2scrn(pPixmap));
+
+	if (pOMAP->pOMAPEXA && pOMAP->pOMAPEXA->FlipPrepare) {
+		pOMAP->pOMAPEXA->FlipPrepare(pPixmap);
+	}
+}
+
 
 /**
  * XV functions..
