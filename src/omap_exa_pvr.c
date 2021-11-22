@@ -21,6 +21,8 @@
 #include "config.h"
 #endif
 
+#include <dlfcn.h>
+
 #include <exa.h>
 #include <gc.h>
 
@@ -991,12 +993,65 @@ PrepareCompositeFail(int op, PicturePtr pSrcPicture, PicturePtr pMaskPicture,
 }
 
 static Bool
+PVRInitServices(ScrnInfoPtr pScrn)
+{
+	void *hLibSrvInit;
+	Bool bStatus;
+	int (*SrvInit)(void);
+	PVRSRV_ERROR eError = -1;
+
+	if (PVRDRMServicesInitStatus(&bStatus)) {
+		WARNING_MSG("PVRDRMServicesInitStatus failed %d", errno);
+		return FALSE;
+	}
+
+	if (bStatus)
+		return TRUE;
+
+	hLibSrvInit = dlopen("libsrv_init.so", RTLD_NOW);
+
+	if (!hLibSrvInit) {
+		WARNING_MSG("Couldn't load PVR Services initialisation library: %s",
+			    dlerror());
+		return FALSE;
+	}
+
+	SrvInit = dlsym(hLibSrvInit, "SrvInit");
+
+	if (!SrvInit) {
+		WARNING_MSG("Couldn't find PVR Services initialisation entry point %s",
+			    dlerror());
+	} else {
+		eError = SrvInit();
+	}
+
+	dlclose(hLibSrvInit);
+
+	if (eError != PVRSRV_OK) {
+		return FALSE;
+	}
+
+	if (PVRDRMServicesInitStatus(&bStatus)) {
+		WARNING_MSG("PVRDRMServicesInitStatus failed %d",
+			    errno);
+		return FALSE;
+	}
+
+	if (bStatus) {
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static Bool
 sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 
-	if (!InitialiseServices(pScreen, &pPVR->srv))
-	{
+	PVRInitServices(pScrn);
+
+	if (!InitialiseServices(pScreen, &pPVR->srv)) {
 		ERROR_MSG("InitialiseServices failed");
 		return FALSE;
 	}

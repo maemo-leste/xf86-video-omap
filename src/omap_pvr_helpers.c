@@ -244,3 +244,46 @@ PVRUnMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, PPVR2DMEMINFO meminfo)
 
 	return err == PVRSRV_OK ? IMG_TRUE : IMG_FALSE;
 }
+
+/* FIXME - get from kernel headers */
+struct pvr_unpriv {
+	uint32_t cmd;
+	uint32_t res;
+};
+
+#define DRM_PVR_UNPRIV		0x4
+#define PVR_UNPRIV_INIT_SUCCESFUL 0
+
+static int
+PVRDRMOpen(void)
+{
+  return drmOpen("pvr", NULL);
+}
+
+int
+PVRDRMServicesInitStatus(Bool *pbStatus)
+{
+	int fd;
+	int res;
+	struct pvr_unpriv cmd = {
+		.cmd = PVR_UNPRIV_INIT_SUCCESFUL,
+		.res = 0
+	};
+
+	fd = PVRDRMOpen();
+
+	if (fd < 0) {
+		return fd;
+	}
+
+	res = drmCommandWriteRead(fd, DRM_PVR_UNPRIV, &cmd, sizeof(cmd));
+	drmClose(fd);
+
+	if (res < 0) {
+		return res;
+	}
+
+	*pbStatus = cmd.res != 0;
+
+	return 0;
+}

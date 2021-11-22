@@ -25,5 +25,7 @@
 IMG_BOOL InitialiseServices(ScreenPtr pScreen, PPVRSERVICES *pSrv);
 void DeInitialiseServices(ScreenPtr pScreen, PPVRSERVICES pSrv);
 
+int PVRDRMServicesInitStatus(Bool *pbStatus);
+
 IMG_BOOL PVRMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, struct omap_bo *bo, PPVR2DMEMINFO meminfo);
 IMG_BOOL PVRUnMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, PPVR2DMEMINFO meminfo);
