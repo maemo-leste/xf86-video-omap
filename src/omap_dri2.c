@@ -70,16 +70,6 @@ static void OMAPDRI2DestroyBuffer(DrawablePtr pDraw, DRI2BufferPtr buffer);
 
 /* ************************************************************************* */
 
-/**
- * We implement triple buffering a bit different than some of the other
- * DDX drivers.  Instead of implementing it transparently, we let the
- * client explicitly request the third buffer.  Triple buffering is a
- * tradeoff between jitter/fps and latency, so some applications might
- * be better off without triple buffering.
- */
-
-#define DRI2BufferThirdLeft       (DRI2BufferBackLeft | 0x00008000)
-
 static DevPrivateKeyRec           OMAPDRI2WindowPrivateKeyRec;
 #define OMAPDRI2WindowPrivateKey  (&OMAPDRI2WindowPrivateKeyRec)
 static DevPrivateKeyRec           OMAPDRI2PixmapPrivateKeyRec;
@@ -88,10 +78,6 @@ static RESTYPE                    OMAPDRI2DrawableRes;
 
 typedef struct {
 	DrawablePtr pDraw;
-
-	/* keep track of the third buffer, if created by the client:
-	 */
-	DRI2BufferPtr pThirdBuffer;
 
 	/* in case of triple buffering, we can get another swap request
 	 * before the previous has completed, so queue up the next one:
@@ -267,6 +253,10 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 		pPixmap->refcnt++;
 	} else {
 		pPixmap = createpix(pDraw, canflip(pDraw));
+
+		if (pDraw->type == DRAWABLE_WINDOW) {
+			DRI2SwapLimit(pDraw, (pOMAP->TripleBuffer? 2 : 1));
+		}
 	}
 
 	bo = OMAPPixmapBo(pPixmap);
@@ -283,11 +273,6 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 		ERROR_MSG("could not get buffer name: %d", ret);
 		OMAPDRI2DestroyBuffer(pDraw, DRIBUF(buf));
 		return NULL;
-	}
-
-	if (attachment == DRI2BufferThirdLeft) {
-		OMAPDRI2DrawablePtr pPriv = OMAPDRI2GetDrawable(pDraw);
-		pPriv->pThirdBuffer = DRIBUF(buf);
 	}
 
 	return DRIBUF(buf);
@@ -310,11 +295,6 @@ OMAPDRI2DestroyBuffer(DrawablePtr pDraw, DRI2BufferPtr buffer)
 		return;
 
 	DEBUG_MSG("pDraw=%p, buffer=%p", pDraw, buffer);
-
-	if (buffer->attachment == DRI2BufferThirdLeft) {
-		OMAPDRI2DrawablePtr pPriv = OMAPDRI2GetDrawable(pDraw);
-		pPriv->pThirdBuffer = NULL;
-	}
 
 	/* Pair refcount increment done in OMAPDRI2CreateBuffer */
 	if (buffer->attachment == DRI2BufferFrontLeft && buf->pPixmap->refcnt)
@@ -445,7 +425,6 @@ OMAPDRI2SwapDispatch(DrawablePtr pDraw, OMAPDRISwapCmd *cmd)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-	OMAPDRI2DrawablePtr pPriv = OMAPDRI2GetDrawable(pDraw);
 	OMAPDRI2BufferPtr src = OMAPBUF(cmd->pSrcBuffer);
 	Bool ok_to_flip = drmmode_is_rotated(pScrn) ?
 			OMAPPixmapTiled(src->pPixmap) : TRUE;
@@ -482,19 +461,6 @@ OMAPDRI2SwapDispatch(DrawablePtr pDraw, OMAPDRISwapCmd *cmd)
 	 */
 	if (cmd->type != DRI2_BLIT_COMPLETE) {
 		exchangebufs(pDraw, cmd->pSrcBuffer, cmd->pDstBuffer);
-
-		if (pPriv->pThirdBuffer) {
-			exchangebufs(pDraw, cmd->pSrcBuffer, pPriv->pThirdBuffer);
-		}
-	}
-
-	/* if we are triple buffering, send event back to client
-	 * now, rather than waiting for vblank, so client can
-	 * immediately request the new back buffer:
-	 */
-	if (pPriv->pThirdBuffer) {
-		DRI2SwapComplete(cmd->client, pDraw, 0, 0, 0, cmd->type,
-				cmd->func, cmd->data);
 	}
 
 	/* for exchange/blit, there is no page_flip event to wait for:
@@ -523,10 +489,9 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 
 	if (status == Success) {
 		OMAPDRI2DrawablePtr pPriv = OMAPDRI2GetDrawable(pDraw);
-		if (!pPriv->pThirdBuffer) {
-			DRI2SwapComplete(cmd->client, pDraw, 0, 0, 0, cmd->type,
-					cmd->func, cmd->data);
-		}
+
+		DRI2SwapComplete(cmd->client, pDraw, 0, 0, 0, cmd->type,
+				 cmd->func, cmd->data);
 		if (pPriv->cmd) {
 			/* dispatch queued flip: */
 			OMAPDRISwapCmd *cmd = pPriv->cmd;
@@ -534,6 +499,7 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 			pPriv->cmd = NULL;
 			OMAPDRI2SwapDispatch(pDraw, cmd);
 		}
+
 		pPriv->pending_swaps--;
 	}
 
@@ -621,6 +587,19 @@ OMAPDRI2ScheduleWaitMSC(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
 	return FALSE;
 }
 
+static Bool
+OMAPDRI2SwapLimitValidate(DrawablePtr draw, int swap_limit)
+{
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(draw->pScreen);
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+
+
+	if ((swap_limit < 1 ) || (swap_limit > (pOMAP->TripleBuffer? 2 : 1)))
+		return FALSE;
+
+	return TRUE;
+}
+
 /**
  * The DRI2 ScreenInit() function.. register our handler fxns w/ DRI2 core
  */
@@ -630,17 +609,18 @@ OMAPDRI2ScreenInit(ScreenPtr pScreen)
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	DRI2InfoRec info = {
-			.version			= 6,
-			.fd 				= pOMAP->drmFD,
-			.driverName			= "omap",
-			.deviceName			= pOMAP->deviceName,
+			.version		= 6,
+			.fd 			= pOMAP->drmFD,
+			.driverName		= "omap",
+			.deviceName		= pOMAP->deviceName,
 			.CreateBuffer		= OMAPDRI2CreateBuffer,
 			.DestroyBuffer		= OMAPDRI2DestroyBuffer,
-			.CopyRegion			= OMAPDRI2CopyRegion,
+			.CopyRegion		= OMAPDRI2CopyRegion,
 			.ScheduleSwap		= OMAPDRI2ScheduleSwap,
 			.ScheduleWaitMSC	= OMAPDRI2ScheduleWaitMSC,
-			.GetMSC				= OMAPDRI2GetMSC,
-			.AuthMagic			= drmAuthMagic,
+			.GetMSC			= OMAPDRI2GetMSC,
+			.SwapLimitValidate	= OMAPDRI2SwapLimitValidate,
+			.AuthMagic		= drmAuthMagic,
 	};
 	int minor = 1, major = 0;
 
