@@ -1,3 +1,9 @@
+xf86-video-omap (0.5.1) unstable; urgency=medium
+
+  * Implement triple-buffering
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Sat, 24 Dec 2021 09:53:27 +0200
+
 xf86-video-omap (0.5.0) unstable; urgency=medium
 
   * Add EXA implementation for SGX DDK 1.17.4948957
