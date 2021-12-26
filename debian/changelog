@@ -1,3 +1,10 @@
+xf86-video-omap (0.5.3) unstable; urgency=medium
+
+  * Enable triple-buffering by default again
+  * Do not loop endlessly wating for blits to complete
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Sun, 26 Dec 2021 19:26:19 +0200
+
 xf86-video-omap (0.5.2) unstable; urgency=medium
 
   * Disable triple-buffering by default
