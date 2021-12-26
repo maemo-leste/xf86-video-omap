@@ -154,17 +154,13 @@ waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap)
 
 	pvrPixmapPriv = sgxMapPixmapBo(pPixmap->drawable.pScreen, pixmapPriv);
 
-	do
+	err = PVR2DQueryBlitsComplete(pPVR->srv->hPVR2DContext,
+				      &pvrPixmapPriv->meminfo, 1);
+	if (err)
 	{
-		err = PVR2DQueryBlitsComplete(pPVR->srv->hPVR2DContext,
-					      &pvrPixmapPriv->meminfo, 1);
-		if (err)
-		{
-			ERROR_MSG("%s: PVR2DQueryBlitsComplete failed with error code: %d (%s)",
-				  __func__, err, sgxErrorCodeToString(err));
-		}
+		ERROR_MSG("%s: PVR2DQueryBlitsComplete failed with error code: %d (%s)",
+			  __func__, err, sgxErrorCodeToString(err));
 	}
-	while (err == PVR2DERROR_BLT_NOTCOMPLETE);
 }
 
 static void
