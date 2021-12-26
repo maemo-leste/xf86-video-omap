@@ -564,7 +564,7 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 	omapDebug = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_DEBUG, FALSE);
 
 	pOMAP->dri = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_DRI, TRUE);
-	pOMAP->TripleBuffer = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_TRIPLE_BUFFER, FALSE);
+	pOMAP->TripleBuffer = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_TRIPLE_BUFFER, TRUE);
 
 	/* Determine if user wants to disable hw mouse cursor: */
 	pOMAP->HWCursor = xf86ReturnOptValBool(pOMAP->pOptionInfo,
