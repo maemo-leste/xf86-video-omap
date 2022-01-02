@@ -1576,9 +1576,16 @@ drmmode_screen_fini(ScrnInfoPtr pScrn)
 _X_EXPORT void
 drmmode_flush_scanout(ScrnInfoPtr pScrn)
 {
-	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
-	drmmode_crtc_private_ptr crtc = config->crtc[0]->driver_private;
-	drmmode_ptr mode = crtc->drmmode;
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
 
-	drmModeDirtyFB(mode->fd, mode->fb_id, NULL, 0);
+	/* This should be either crtc atomic property set by kernel or per
+	 * screen property. Well...
+	 */
+	if (pOMAP->ManualUpdate) {
+		xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
+		drmmode_crtc_private_ptr crtc = config->crtc[0]->driver_private;
+		drmmode_ptr mode = crtc->drmmode;
+
+		drmModeDirtyFB(mode->fd, mode->fb_id, NULL, 0);
+	}
 }

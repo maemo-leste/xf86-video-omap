@@ -136,6 +136,7 @@ typedef struct _OMAPRec
 	Bool				HWCursor;
 	Bool				NoAccel;
 	Bool				TripleBuffer;
+	Bool				ManualUpdate;
 
 	/** File descriptor of the connection with the DRM. */
 	int					drmFD;

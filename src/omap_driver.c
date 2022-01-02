@@ -106,6 +106,7 @@ typedef enum {
 	OPTION_NO_ACCEL,
 	OPTION_HW_CURSOR,
 	OPTION_TRIPLE_BUFFER,
+	OPTION_MANUAL_UPDATE,
 	/* TODO: probably need to add an option to let user specify bus-id */
 } OMAPOpts;
 
@@ -116,6 +117,7 @@ static const OptionInfoRec OMAPOptions[] = {
 	{ OPTION_NO_ACCEL,	"NoAccel",	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_HW_CURSOR,	"HWcursor",	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_TRIPLE_BUFFER,	"TripleBuffer",	OPTV_BOOLEAN,	{0},	FALSE },
+	{ OPTION_MANUAL_UPDATE,	"ManualUpdate",	OPTV_BOOLEAN,	{0},	FALSE },
 	{ -1,			NULL,		OPTV_NONE,	{0},	FALSE }
 };
 
@@ -565,6 +567,7 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 
 	pOMAP->dri = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_DRI, TRUE);
 	pOMAP->TripleBuffer = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_TRIPLE_BUFFER, TRUE);
+	pOMAP->ManualUpdate = xf86ReturnOptValBool(pOMAP->pOptionInfo, OPTION_MANUAL_UPDATE, FALSE);
 
 	/* Determine if user wants to disable hw mouse cursor: */
 	pOMAP->HWCursor = xf86ReturnOptValBool(pOMAP->pOptionInfo,
