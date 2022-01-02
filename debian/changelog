@@ -1,3 +1,10 @@
+xf86-video-omap (0.5.4) unstable; urgency=medium
+
+  * Remove "allocate scanout-only buffers" hack
+  * Add ManualUpdate option
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Sun, 02 Jan 2022 10:13:51 +0200
+
 xf86-video-omap (0.5.3) unstable; urgency=medium
 
   * Enable triple-buffering by default again
