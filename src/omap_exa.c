@@ -133,15 +133,10 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 	depth	= pPixmap->drawable.depth;
 	bitsPerPixel = pPixmap->drawable.bitsPerPixel;
 
-#if 0
 	if (pPixmap->usage_hint & OMAP_CREATE_PIXMAP_SCANOUT) {
 		flags |= OMAP_BO_SCANOUT;
 	}
-#else
-	/*FIXME - always allocate scanout-capable BOs, omapdrm refuses
-	  to export them otherwise. Restore once omapdrm is fixed */
-	flags |= OMAP_BO_SCANOUT;
-#endif
+
 	if (pPixmap->usage_hint & OMAP_CREATE_PIXMAP_TILED) {
 		switch (bitsPerPixel) {
 		case 8:
