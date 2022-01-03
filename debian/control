@@ -1,5 +1,5 @@
 Source: xf86-video-omap
-Section: droid4
+Section: x11
 Priority: optional
 Maintainer: Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>
 Build-Depends: debhelper (>= 10~),
