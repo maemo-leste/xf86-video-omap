@@ -73,8 +73,6 @@ typedef struct _OMAPEXARec
 
 	/* add new fields here at end, to preserve ABI */
 
-	void (*FlipPrepare)(PixmapPtr pPixmap);
-
 	/* padding to keep ABI stable, so an existing EXA submodule
 	 * doesn't need to be recompiled when new fields are added
 	 */

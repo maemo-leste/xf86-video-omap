@@ -1384,8 +1384,6 @@ drmmode_page_flip(DrawablePtr pDraw, PixmapPtr back, void *priv)
 			flipdata->flip_count++;
 	}
 
-	OMAPDRI2FlipPrepare(back);
-
 	for (i = 0; i < config->num_crtc; i++) {
 		crtc = config->crtc[i]->driver_private;
 

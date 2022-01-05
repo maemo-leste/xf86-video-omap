@@ -661,12 +661,3 @@ OMAPDRI2CloseScreen(ScreenPtr pScreen)
 	}
 	DRI2CloseScreen(pScreen);
 }
-
-/**
- * Do whatever needed on pixmap to make it ready for page flip
- */
-void
-OMAPDRI2FlipPrepare(PixmapPtr pPixmap)
-{
-	OMAPFlipPrepare(pPixmap);
-}

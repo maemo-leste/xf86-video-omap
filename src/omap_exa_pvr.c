@@ -1069,12 +1069,6 @@ sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 
 }
 
-static void
-sgxFlipPrepare(PixmapPtr pPixmap)
-{
-	waitForBlitsCompleteOnDeviceMem(pPixmap);
-}
-
 _X_EXPORT OMAPEXAPtr
 InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 {
@@ -1147,7 +1141,6 @@ InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 //	omap_exa->PutTextureImage = PutTextureImage;
 	omap_exa->CloseScreen = CloseScreen;
 	omap_exa->FreeScreen = FreeScreen;
-	omap_exa->FlipPrepare = sgxFlipPrepare;
 
 	return omap_exa;
 
