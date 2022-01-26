@@ -1,3 +1,10 @@
+xf86-video-omap (0.5.6) unstable; urgency=medium
+
+  * Fix DRI2 buffers scanout refcounting
+  * EXA: PVR: Simplify scanout pixmap private data tracking
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Wed, 26 Jan 2022 12:53:52 +0200
+
 xf86-video-omap (0.5.5) unstable; urgency=medium
 
   * Remove FlipPrepare hack
