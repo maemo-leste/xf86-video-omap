@@ -210,27 +210,20 @@ sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 static void
 sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 {
-	PrivPixmapPtr pvrPixmapPriv = pixmapPriv->priv;
+	PrivPixmapPtr priv = pixmapPriv->priv;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
 
-	if (pvrPixmapPriv) {
-		if (pvrPixmapPriv->meminfo.hPrivateData) {
-			ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-			PVRPtr pPVR = PVREXAPTR(pScrn);
+	if (priv) {
+		if (pPVR->scanout_priv == priv)
+			pPVR->scanout_priv = NULL;
 
-			PVRUnMapBo(pScreen, pPVR->srv, &pvrPixmapPriv->meminfo);
-		}
+		if (priv->meminfo.hPrivateData)
+			PVRUnMapBo(pScreen, pPVR->srv, &priv->meminfo);
 
-		free(pvrPixmapPriv);
+		free(priv);
 		pixmapPriv->priv = NULL;
 	}
-
-	if (pixmapPriv->bo == pOMAP->scanout) {
-		pPVR->scanout_priv = NULL;
-	}
-
 }
 
 static Bool
@@ -243,12 +236,10 @@ CloseScreen(CLOSE_SCREEN_ARGS_DECL)
 	if (pPVR->scanout_priv) {
 		PrivPixmapPtr pvrPixmapPriv = pPVR->scanout_priv;
 
-		if (pvrPixmapPriv->meminfo.hPrivateData) {
+		if (pvrPixmapPriv->meminfo.hPrivateData)
 			PVRUnMapBo(pScreen, pPVR->srv, &pvrPixmapPriv->meminfo);
-		}
 
 		free(pvrPixmapPriv);
-
 		pPVR->scanout_priv = NULL;
 	}
 
@@ -272,17 +263,7 @@ FreeScreen(FREE_SCREEN_ARGS_DECL)
 static void
 sgxDestroyPixmap(ScreenPtr pScreen, void *driverPriv)
 {
-	OMAPPixmapPrivPtr pixmapPriv = driverPriv;
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	PVRPtr pPVR = PVREXAPTR(pScrn);
-
-	sgxUnmapPixmapBo(pScreen, pixmapPriv);
-
-	if (pixmapPriv->bo == pOMAP->scanout) {
-		pPVR->scanout_priv = NULL;
-	}
-
+	sgxUnmapPixmapBo(pScreen, driverPriv);
 	OMAPDestroyPixmap(pScreen, driverPriv);
 }
 
