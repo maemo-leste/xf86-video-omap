@@ -98,13 +98,14 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 	Bool ret;
 
 	ret = miModifyPixmapHeader(pPixmap, width, height, depth,
-			bitsPerPixel, devKind, pPixData);
+			bitsPerPixel, devKind, NULL);
 	if (!ret) {
 		return ret;
 	}
 
 	if (pPixData == omap_bo_map(pOMAP->scanout)) {
 		DEBUG_MSG("wrapping scanout buffer");
+		pPixmap->devPrivate.ptr = pPixData;
 		priv->bo = pOMAP->scanout;
 		return TRUE;
 	} else if (pPixData) {
