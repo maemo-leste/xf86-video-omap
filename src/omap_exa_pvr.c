@@ -250,7 +250,7 @@ sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 	if (!pvrPixmapPriv->meminfo.hPrivateData) {
 		sgxMapUnmapLRU(pScreen, pPVR);
 
-		if (!PVRMapBo(pScreen, pPVR->srv, pixmapPriv->bo,
+		if (!PVRMapBo(pScreen, pPVR->srv, pOMAP->drmFD, pixmapPriv->bo,
 			      &pvrPixmapPriv->meminfo)) {
 			free(pvrPixmapPriv);
 			pixmapPriv->priv = NULL;

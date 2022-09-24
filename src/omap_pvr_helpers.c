@@ -22,6 +22,8 @@
 #endif
 
 #include <stdlib.h>
+#include <fcntl.h>
+#include <drm.h>
 
 #include <pvr_debug.h>
 
@@ -191,27 +193,37 @@ DeInitialiseServices(ScreenPtr pScreen, PPVRSERVICES pSrv)
 }
 
 IMG_BOOL
-PVRMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, struct omap_bo *bo,
+PVRMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, int drmFD, struct omap_bo *bo,
 	 PPVR2DMEMINFO meminfo)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	int fd = omap_bo_dmabuf(bo);
 	PVRSRV_ERROR err;
 	PPVRSRV_CLIENT_MEM_INFO psClientMemInfo;
+	struct drm_prime_handle req = {
+		.handle = omap_bo_handle(bo),
+		.flags = DRM_CLOEXEC,
+	};
+
+	if (drmIoctl(drmFD, DRM_IOCTL_PRIME_HANDLE_TO_FD, &req)) {
+		ERROR_MSG("DRM_IOCTL_PRIME_HANDLE_TO_FD failed: %s(%d)",
+			  strerror(errno), errno);
+		return IMG_FALSE;
+	}
 
 	err = PVRSRVMapFullDmaBuf(
 		      &pSrv->dev_data,
 		      pSrv->h_mapping_heap,
 		      PVRSRV_MAP_NOUSERVIRTUAL,
-		      fd,
+		      req.fd,
 		      (PPVRSRV_CLIENT_MEM_INFO *)&meminfo->hPrivateData);
+
+	close(req.fd);
 
 	if (err != PVRSRV_OK) {
 		ERROR_MSG("PVRSRVMapFullDmaBuf failed: %s fd %d",
-		PVRSRVGetErrorString(err), fd);
+		PVRSRVGetErrorString(err), req.fd);
+		return IMG_FALSE;
 	}
-
-	close(fd);
 
 	psClientMemInfo = (PPVRSRV_CLIENT_MEM_INFO)meminfo->hPrivateData;
 	meminfo->ui32MemSize = psClientMemInfo->uAllocSize;
