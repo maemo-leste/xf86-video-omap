@@ -157,6 +157,9 @@ waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap)
 
 	pvrPixmapPriv = sgxMapPixmapBo(pPixmap->drawable.pScreen, pixmapPriv);
 
+	if (!pvrPixmapPriv)
+		return;
+
 	err = PVR2DQueryBlitsComplete(pPVR->srv->hPVR2DContext,
 				      &pvrPixmapPriv->meminfo, 1);
 	if (err)
@@ -567,6 +570,9 @@ sgxPrepareSolid(PixmapPtr pPixmap, int alu, Pixel planemask, Pixel fill_colour)
 
 	pvrPixmapPriv = sgxMapPixmapBo(pPixmap->drawable.pScreen, pixmapPriv);
 
+	if (!pvrPixmapPriv)
+		return FALSE;
+
 	memset(&gsSolidOp, 0, sizeof(gsSolidOp));
 	gsSolidOp.pPixmap = pPixmap;
 
@@ -801,6 +807,10 @@ sgxPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int xdir, int ydir, int alu,
 	pvrDstPriv = sgxMapPixmapBo(pDst->drawable.pScreen, dstPriv);
 	srcPriv = exaGetPixmapDriverPrivate(pSrc);
 	pvrSrcPriv = sgxMapPixmapBo(pSrc->drawable.pScreen, srcPriv);
+
+	/* fallback to software instead of crashing */
+	if (!pvrDstPriv || !pvrSrcPriv)
+		return FALSE;
 
 	if (copy2d(bitsPerPixel)) {
 		gsCopy2DOp.blt2D.ColourKey = 0;
