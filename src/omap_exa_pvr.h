@@ -40,11 +40,15 @@ typedef struct PVR
 	ExaDriverPtr exa;
 	PPVRSERVICES srv;
 	void *scanout_priv;
+	/* LRU BO maps */
+	struct xorg_list map_list;
+	unsigned long map_count;
 } PVRRec, *PVRPtr;
 
 typedef struct PrivPixmap
 {
 	PVR2DMEMINFO meminfo;
+	struct xorg_list map;
 } PrivPixmapRec, *PrivPixmapPtr;
 
 typedef enum

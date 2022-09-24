@@ -25,6 +25,7 @@
 
 #include <exa.h>
 #include <gc.h>
+#include <list.h>
 
 #include <pvr_debug.h>
 
@@ -34,6 +35,8 @@
 #include "omap_exa_pvr.h"
 #include "omap_pvr_helpers.h"
 #include "omap_pvr_use.h"
+
+#define PVR_MAX_BO_MAPS 32
 
 static PVRSolidOp gsSolidOp;
 static PVRCopyOp gsCopy2DOp;
@@ -167,27 +170,86 @@ static void
 sgxAccelDestroy(ScreenPtr pScreen, PVRPtr pPVR)
 {
 	PVRUseDeInit(pScreen, pPVR);
-
 	/*
-PVRRenderDestroy(pScreen);
-*/
+	PVRRenderDestroy(pScreen);
+	*/
 	DeInitialiseServices(pScreen, pPVR->srv);
+}
+
+static void
+sgxMapInit(PVRPtr pPVR)
+{
+	xorg_list_init(&pPVR->map_list);
+	pPVR->map_count = 0;
+}
+
+static void
+sgxMapRemove(ScreenPtr pScreen, PVRPtr pPVR, PrivPixmapPtr pvrPixmapPriv)
+{
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+
+	if (!pvrPixmapPriv->meminfo.hPrivateData)
+		return;
+
+	pPVR->map_count--;
+	xorg_list_del(&pvrPixmapPriv->map);
+
+	DEBUG_MSG("Mappings entry %p removed, list size %lu",
+		  pvrPixmapPriv, pPVR->map_count);
+}
+
+static void
+sgxMapUnmapLRU(ScreenPtr pScreen, PVRPtr pPVR)
+{
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	PrivPixmapPtr pvrPixmapPriv;
+
+	if (pPVR->map_count <= PVR_MAX_BO_MAPS)
+		return;
+
+	pvrPixmapPriv = xorg_list_first_entry(
+				&pPVR->map_list, PrivPixmapRec, map);
+	DEBUG_MSG("Mappings list is full, removing last entry");
+
+	sgxMapRemove(pScreen, pPVR, pvrPixmapPriv);
+
+	if (pvrPixmapPriv->meminfo.hPrivateData) {
+		PVRUnMapBo(pScreen, pPVR->srv, &pvrPixmapPriv->meminfo);
+		pvrPixmapPriv->meminfo.hPrivateData = NULL;
+	}
+}
+
+static void
+sgxMapMarkUsed(PVRPtr pPVR, PrivPixmapPtr pvrPixmapPriv)
+{
+	struct xorg_list *map = &pvrPixmapPriv->map;
+
+	if (map->next == map->prev && map->prev == map)
+		pPVR->map_count++;
+	else
+		xorg_list_del(map);
+
+	xorg_list_append(map, &pPVR->map_list);
 }
 
 static PrivPixmapPtr
 sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 {
-	PrivPixmapPtr pvrPixmapPriv;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	PrivPixmapPtr pvrPixmapPriv;
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
 
-	if (!pixmapPriv->priv)
+	if (!pixmapPriv->priv) {
 		pixmapPriv->priv = calloc(sizeof(PrivPixmapRec), 1);
+		xorg_list_init(&((PrivPixmapPtr)pixmapPriv->priv)->map);
+	}
 
 	pvrPixmapPriv = pixmapPriv->priv;
 
 	if (!pvrPixmapPriv->meminfo.hPrivateData) {
+		sgxMapUnmapLRU(pScreen, pPVR);
+
 		if (!PVRMapBo(pScreen, pPVR->srv, pixmapPriv->bo,
 			      &pvrPixmapPriv->meminfo)) {
 			free(pvrPixmapPriv);
@@ -198,11 +260,12 @@ sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 
 	/*
 	 * We have to keep a pointer, as otherwise we cannot unmap in
-	 * CloseScreen
+	 * CloseScreen. Also, never add scanout mappings to the list.
 	 */
-	if (pixmapPriv->bo == pOMAP->scanout) {
+	if (pixmapPriv->bo == pOMAP->scanout)
 		pPVR->scanout_priv = pixmapPriv->priv;
-	}
+	else
+		sgxMapMarkUsed(pPVR, pvrPixmapPriv);
 
 	return pvrPixmapPriv;
 }
@@ -210,18 +273,20 @@ sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 static void
 sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 {
-	PrivPixmapPtr priv = pixmapPriv->priv;
+	PrivPixmapPtr pvrPixmapPriv = pixmapPriv->priv;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
 
-	if (priv) {
-		if (pPVR->scanout_priv == priv)
+	if (pvrPixmapPriv) {
+		if (pPVR->scanout_priv == pvrPixmapPriv)
 			pPVR->scanout_priv = NULL;
+		else
+			sgxMapRemove(pScreen, pPVR, pvrPixmapPriv);
 
-		if (priv->meminfo.hPrivateData)
-			PVRUnMapBo(pScreen, pPVR->srv, &priv->meminfo);
+		if (pvrPixmapPriv->meminfo.hPrivateData)
+			PVRUnMapBo(pScreen, pPVR->srv, &pvrPixmapPriv->meminfo);
 
-		free(priv);
+		free(pvrPixmapPriv);
 		pixmapPriv->priv = NULL;
 	}
 }
@@ -1029,6 +1094,8 @@ static Bool
 sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+
+	sgxMapInit(pPVR);
 
 	PVRInitServices(pScrn);
 
