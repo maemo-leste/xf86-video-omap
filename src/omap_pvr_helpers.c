@@ -299,3 +299,56 @@ PVRDRMServicesInitStatus(Bool *pbStatus)
 
 	return 0;
 }
+
+#if 0
+PVR2DERROR
+ValidateTransferContext(PVR2DCONTEXT *pContext)
+{
+	int prio;
+	SGX_CREATE_TRANSFER_CONTEXT sCreateTransfer;
+
+	if (pContext->hTransferContext)
+		return PVR2D_OK;
+
+	if ((pContext->sMiscInfo.ui32StatePresent &
+	     PVRSRV_MISC_INFO_GLOBALEVENTOBJECT_PRESENT))
+	{
+		sCreateTransfer.hOSEvent = pContext->sMiscInfo.hOSGlobalEvent;
+	}
+	else
+		sCreateTransfer.hOSEvent = 0;
+
+	sCreateTransfer.hDevMemContext = pContext->hDevMemContext;
+
+	if (SGXCreateTransferContext(
+		    &pContext->sDevData, 130 * 1024, /* WTF is that ?!? */
+		    &sCreateTransfer, &pContext->hTransferContext))
+	{
+		return PVR2DERROR_GENERIC_ERROR;
+	}
+
+	switch (pContext->ulFlags & PVR2D_CONTEXT_FLAGS_PRIORITY_MASK)
+	{
+		case PVR2D_CONTEXT_FLAGS_NORMAL_PRIORITY_CONTEXT:
+			return PVR2D_OK;
+		case PVR2D_CONTEXT_FLAGS_LOW_PRIORITY_CONTEXT:
+			prio = 0;
+			break;
+		case PVR2D_CONTEXT_FLAGS_HIGH_PRIORITY_CONTEXT:
+			prio = 2;
+			break;
+		default:
+			prio = 1;
+			break;
+	}
+
+	if (SGXSetContextPriority(&pContext->sDevData, &prio, 0,
+				  pContext->hTransferContext))
+	{
+		SGXDestroyTransferContext(pContext->hTransferContext, 0);
+		return PVR2DERROR_GENERIC_ERROR;
+	}
+
+	return PVR2D_OK;
+}
+#endif

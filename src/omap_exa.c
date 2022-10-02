@@ -154,7 +154,14 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 		}
 		pPixmap->devKind = OMAPCalculateTiledStride(width, bitsPerPixel);
 	} else {
-		pPixmap->devKind = OMAPCalculateStride(width, bitsPerPixel);
+		if (!(pPixmap->usage_hint & OMAP_CREATE_PIXMAP_SCANOUT) &&
+		    (pPixmap->usage_hint & OMAP_CREATE_PIXMAP_XV)) {
+			/* we count on OMAPVideoPutImage to have calculated
+			   the correct stride*/
+			pPixmap->devKind = pPixmap->usage_hint & ~OMAP_CREATE_PIXMAP_XV;
+		}
+		else
+			pPixmap->devKind = OMAPCalculateStride(width, bitsPerPixel);
 	}
 
 	size = pPixmap->devKind * height;

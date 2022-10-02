@@ -129,7 +129,7 @@ typedef struct {
 
 #define OMAP_CREATE_PIXMAP_SCANOUT 0x80000000
 #define OMAP_CREATE_PIXMAP_TILED   0x40000000
-
+#define OMAP_CREATE_PIXMAP_XV      0x20000000
 
 void * OMAPCreatePixmap (ScreenPtr pScreen, int width, int height,
 		int depth, int usage_hint, int bitsPerPixel,

@@ -70,10 +70,10 @@ static XF86ImageRec OMAPVideoTexturedImages[MAX_FORMATS];
 
 static PixmapPtr
 setupplane(ScreenPtr pScreen, PixmapPtr pSrcPix, int width, int height,
-		int depth, int srcpitch, int bufpitch, unsigned char **bufp)
+		int depth, int bufpitch, int srcpitch, unsigned char *buf)
 {
 	struct omap_bo *bo;
-	unsigned char *src, *buf = *bufp;
+	unsigned char *src;
 	int i;
 
 	if (pSrcPix && ((pSrcPix->drawable.height != height) ||
@@ -83,12 +83,19 @@ setupplane(ScreenPtr pScreen, PixmapPtr pSrcPix, int width, int height,
 	}
 
 	if (!pSrcPix) {
-		pSrcPix = pScreen->CreatePixmap(pScreen, width, height, depth, 0);
+		int flags = srcpitch ? OMAP_CREATE_PIXMAP_XV | srcpitch: 0;
+
+		pSrcPix = pScreen->CreatePixmap(pScreen, width, height, depth,
+						flags);
 	}
 
 	bo = OMAPPixmapBo(pSrcPix);
+#if 0
 	omap_bo_cpu_prep(bo, OMAP_GEM_WRITE);
+#endif
+
 	src = omap_bo_map(bo);
+	srcpitch = exaGetPixmapPitch(pSrcPix);
 
 	/* copy from buf to src pixmap: */
 	for (i = 0; i < height; i++) {
@@ -97,9 +104,9 @@ setupplane(ScreenPtr pScreen, PixmapPtr pSrcPix, int width, int height,
 		buf += bufpitch;
 	}
 
+#if 0
 	omap_bo_cpu_fini(bo, OMAP_GEM_WRITE);
-
-	*bufp = buf;
+#endif
 
 	return pSrcPix;
 }
@@ -216,7 +223,7 @@ OMAPVideoPutImage(ScrnInfoPtr pScrn, short src_x, short src_y, short drw_x,
 			.y2 = drw_y + drw_h,
 	};
 	int i, depth, nplanes;
-	int srcpitch1, srcpitch2, bufpitch1, bufpitch2, src_h2, src_w2;
+	int bufpitch1, bufpitch2, srcpitch, height2, src_h2, src_w2;
 
 	switch (id) {
 //	case fourcc_code('N','V','1','2'):
@@ -224,22 +231,21 @@ OMAPVideoPutImage(ScrnInfoPtr pScrn, short src_x, short src_y, short drw_x,
 	case fourcc_code('Y','V','1','2'):
 	case fourcc_code('I','4','2','0'):
 		nplanes = 3;
-		srcpitch1 = ALIGN(src_w, 4);
-		srcpitch2 = ALIGN(src_w / 2, 4);
 		bufpitch1 = ALIGN(width, 4);
 		bufpitch2 = ALIGN(width / 2, 4);
 		depth = 8;
 		src_h2 = src_h / 2;
 		src_w2 = src_w / 2;
+		height2 = height / 2;
 		break;
 	case fourcc_code('U','Y','V','Y'):
 	case fourcc_code('Y','U','Y','V'):
 	case fourcc_code('Y','U','Y','2'):
 		nplanes = 1;
-		srcpitch1 = src_w * 2;
 		bufpitch1 = width * 2;
 		depth = 16;
-		srcpitch2 = bufpitch2 = src_h2 = src_w2 = 0;
+		bufpitch2 = src_h2 = src_w2 = 0;
+		height2 = height;
 		break;
 	default:
 		ERROR_MSG("unexpected format: %08x (%4.4s)", id, (char *)&id);
@@ -254,11 +260,14 @@ OMAPVideoPutImage(ScrnInfoPtr pScrn, short src_x, short src_y, short drw_x,
 	pPriv->nplanes = nplanes;
 
 	pPriv->pSrcPix[0] = setupplane(pScreen, pPriv->pSrcPix[0],
-			src_w, src_h, depth, srcpitch1, bufpitch1, &buf);
+			src_w, src_h, depth, bufpitch1, 0, buf);
+	buf += bufpitch1 * height;
+	srcpitch = exaGetPixmapPitch(pPriv->pSrcPix[0]) / 2;
 
 	for (i = 1; i < pPriv->nplanes; i++) {
 		pPriv->pSrcPix[i] = setupplane(pScreen, pPriv->pSrcPix[i],
-				src_w2, src_h2, depth, srcpitch2, bufpitch2, &buf);
+			src_w2, src_h2, depth, bufpitch2, srcpitch, buf);
+		buf += bufpitch2 * height2;
 	}
 
 	/* note: OMAPVidCopyArea() handles the composite-clip, so we can
@@ -361,7 +370,6 @@ OMAPVideoSetupTexturedVideo(ScreenPtr pScreen)
 			(sizeof(DevUnion) * NUM_TEXTURE_PORTS)))) {
 		return NULL;
 	}
-
 
 	adapt->type			= XvWindowMask | XvInputMask | XvImageMask;
 	adapt->flags		= 0;
