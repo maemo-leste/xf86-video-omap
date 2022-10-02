@@ -1,3 +1,9 @@
+xf86-video-omap (0.5.8) unstable; urgency=medium
+
+  * EXA: PVR: Implement XV support
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Sun, 02 Oct 2022 17:56:21 +0300
+
 xf86-video-omap (0.5.7) unstable; urgency=medium
 
   * EXA: PVR: Implement LRU list of BO mappings
