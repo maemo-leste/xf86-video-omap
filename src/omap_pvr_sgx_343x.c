@@ -1,7 +1,7 @@
 /*
- * omap_pvr_helpers.h
+ * omap_pvr_sgx.c
  *
- * Copyright (C) 2021 Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>
+ * Copyright (C) 2022 Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>
  *
  * This library is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by
@@ -17,17 +17,5 @@
  *
  */
 
-#include <limits.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
-
-IMG_BOOL InitialiseServices(ScreenPtr pScreen, PPVRSERVICES *pSrv);
-void DeInitialiseServices(ScreenPtr pScreen, PPVRSERVICES pSrv);
-
-int PVRDRMServicesInitStatus(Bool *pbStatus);
-
-IMG_BOOL PVRMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv, int drmFD,
-		  struct omap_bo *bo, PPVR2DMEMINFO meminfo);
-IMG_BOOL PVRUnMapBo(ScreenPtr pScreen, PPVRSERVICES pSrv,
-		    PPVR2DMEMINFO meminfo);
+#define SGX_OMAP_343x
+#include "omap_pvr_sgx.c"

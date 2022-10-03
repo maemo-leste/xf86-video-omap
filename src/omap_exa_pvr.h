@@ -169,4 +169,14 @@ typedef struct PVRCopyOp_TAG
 
 const char *sgxErrorCodeToString(PVR2DERROR err);
 
+static inline PVRPtr
+PVREXAPTR(ScrnInfoPtr pScrn)
+{
+	return (PVRPtr)OMAPEXAPTR(pScrn);
+}
+
+void sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
+PrivPixmapPtr sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
+void sgxWaitPixmap(PixmapPtr pPixmap);
+
 #endif /* __OMAP_EXA_PVR_H__ */

@@ -67,4 +67,7 @@ omap_pvr_drv_ladir = @moduledir@
 omap_pvr_drv_la_SOURCES = \
 	omap_pvr_helpers.c \
 	omap_pvr_use.c \
+	omap_pvr_sgx_443x.c \
+	omap_pvr_sgx_343x.c \
+	omap_pvr_sgx_wrap.c \
 	omap_exa_pvr.c
