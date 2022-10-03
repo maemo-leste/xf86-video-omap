@@ -126,7 +126,8 @@ freebufs(ScreenPtr pScreen, OMAPPortPrivPtr pPriv)
 static void
 OMAPVideoStopVideo(ScrnInfoPtr pScrn, pointer data, Bool exit)
 {
-	/* maybe we can deallocate pSrcPix here?? */
+	if (exit)
+		freebufs(pScrn->pScreen, data);
 }
 
 static int
@@ -372,7 +373,7 @@ OMAPVideoSetupTexturedVideo(ScreenPtr pScreen)
 	}
 
 	adapt->type			= XvWindowMask | XvInputMask | XvImageMask;
-	adapt->flags		= 0;
+	adapt->flags		= VIDEO_OVERLAID_IMAGES;
 	adapt->name			= (char *)"OMAP Textured Video";
 	adapt->nEncodings	= ARRAY_SIZE(OMAPVideoEncoding);
 	adapt->pEncodings	= OMAPVideoEncoding;
@@ -468,11 +469,4 @@ OMAPVideoScreenInit(ScreenPtr pScreen)
 void
 OMAPVideoCloseScreen(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	if (pOMAP->textureAdaptor) {
-		OMAPPortPrivPtr pPriv = (OMAPPortPrivPtr)
-				pOMAP->textureAdaptor->pPortPrivates[0].ptr;
-		freebufs(pScreen, pPriv);
-	}
 }
