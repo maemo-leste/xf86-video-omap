@@ -1,3 +1,9 @@
+xf86-video-omap (0.6.0) unstable; urgency=medium
+
+  * PVR: XV: Support both 443x and 343x OMAPs
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Mon, 03 Oct 2022 20:11:28 +0300
+
 xf86-video-omap (0.5.9) unstable; urgency=medium
 
   * PVR: XV: Wait for blits to complete and flush the scanout
