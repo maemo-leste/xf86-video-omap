@@ -1,3 +1,10 @@
+xf86-video-omap (0.5.9) unstable; urgency=medium
+
+  * PVR: XV: Wait for blits to complete and flush the scanout
+  * XV: Do not keep pixmaps around for longer than needed
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Mon, 03 Oct 2022 14:00:11 +0300
+
 xf86-video-omap (0.5.8) unstable; urgency=medium
 
   * EXA: PVR: Implement XV support
