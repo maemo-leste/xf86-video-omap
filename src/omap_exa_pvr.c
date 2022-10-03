@@ -45,6 +45,8 @@ static void
 sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
 static PrivPixmapPtr
 sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
+static void
+waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap);
 
 static Bool copy2d(int bitsPerPixel)
 {
@@ -132,19 +134,13 @@ sgxErrorCodeToString(PVR2DERROR err)
 	}
 }
 
-static unsigned int
-GetFormats(unsigned int *formats)
+static void
+sgxWaitPixmap(PixmapPtr pPixmap)
 {
-	int i = 0;
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 
-	/*formats[i++] = fourcc_code('N', 'V', '1', '2');*/
-	formats[i++] = fourcc_code('Y', 'V', '1', '2');
-	formats[i++] = fourcc_code('I', '4', '2', '0');
-	formats[i++] = fourcc_code('U', 'Y', 'V', 'Y');
-	formats[i++] = fourcc_code('Y', 'U', 'Y', 'V');
-	formats[i++] = fourcc_code('Y', 'U', 'Y', '2');
-
-	return i;
+	waitForBlitsCompleteOnDeviceMem(pPixmap);
+	drmmode_flush_scanout(pScrn);
 }
 
 static void
@@ -205,13 +201,11 @@ PutTextureImage(PixmapPtr pSrcPix, BoxPtr pSrcBox, PixmapPtr pOsdPix,
 		.ui32NumDestRects = 1
 	};
 	ScrnInfoPtr pScrn = pix2scrn(pDstPix);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
 	int bitsPerPixel = pDstPix->drawable.bitsPerPixel;
 	PVR2DCONTEXT *pContext;
 	PVRSRV_PIXEL_FORMAT fmt;
 	PVRSRV_ERROR err;
-	OMAPPixmapPrivPtr pDstPixPriv = exaGetPixmapDriverPrivate(pDstPix);
 
 	int i;
 	int dst_h;
@@ -337,9 +331,7 @@ PutTextureImage(PixmapPtr pSrcPix, BoxPtr pSrcBox, PixmapPtr pOsdPix,
 	err = SGXQueueTransfer(pContext->hTransferContext, &sBlitInfo);
 
 	if (err == PVRSRV_OK) {
-		if (pDstPixPriv->bo == pOMAP->scanout)
-			drmmode_flush_scanout(pScrn);
-
+		sgxWaitPixmap(pDstPix);
 		return TRUE;
 	}
 
@@ -956,12 +948,10 @@ sgxDoneSolid(PixmapPtr pPixmap)
 	PVR_ASSERT(gsSolidOp.pPixmap == pPixmap);
 
 	sgxSolidNextBatch(pScrn, pPVR, TRUE);
-
-	waitForBlitsCompleteOnDeviceMem(pPixmap);
+	sgxWaitPixmap(pPixmap);
 
 	gsSolidOp.softFallback.psGC = NULL;
 	gsSolidOp.pPixmap = NULL;
-	drmmode_flush_scanout(pScrn);
 }
 
 static PVR2DFORMAT
@@ -1220,17 +1210,13 @@ sgxCopy(PixmapPtr pDstPixmap, int srcX, int srcY, int dstX, int dstY,
 static void
 sgxDoneCopy(PixmapPtr pPixmap)
 {
-	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
-
 	PVR_ASSERT(gsCopy2DOp.renderOp.pDest == pPixmap);
 
 	sgxCopyNextBatch(pPixmap->drawable.pScreen, TRUE);
-
-	waitForBlitsCompleteOnDeviceMem(pPixmap);
+	sgxWaitPixmap(pPixmap);
 
 	gsCopy2DOp.renderOp.pSrc = NULL;
 	gsCopy2DOp.renderOp.pDest = NULL;
-	drmmode_flush_scanout(pScrn);
 }
 
 static Bool
@@ -1325,6 +1311,21 @@ sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 
 	return TRUE;
 
+}
+
+static unsigned int
+GetFormats(unsigned int *formats)
+{
+	int i = 0;
+
+	/*formats[i++] = fourcc_code('N', 'V', '1', '2');*/
+	formats[i++] = fourcc_code('Y', 'V', '1', '2');
+	formats[i++] = fourcc_code('I', '4', '2', '0');
+	formats[i++] = fourcc_code('U', 'Y', 'V', 'Y');
+	formats[i++] = fourcc_code('Y', 'U', 'Y', 'V');
+	formats[i++] = fourcc_code('Y', 'U', 'Y', '2');
+
+	return i;
 }
 
 _X_EXPORT OMAPEXAPtr
