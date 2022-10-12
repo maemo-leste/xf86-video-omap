@@ -1,3 +1,9 @@
+xf86-video-omap (0.6.1) unstable; urgency=medium
+
+  * EXA: PVR: Implement pixmap BO cache
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Wed, 12 Oct 2022 12:14:17 +0300
+
 xf86-video-omap (0.6.0) unstable; urgency=medium
 
   * PVR: XV: Support both 443x and 343x OMAPs
