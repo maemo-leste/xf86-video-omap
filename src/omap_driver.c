@@ -192,7 +192,7 @@ OMAPCloseDRMMaster(ScrnInfoPtr pScrn)
  * rather than hard-coding..
  */
 #define STRIDE_BOUNDARY 32
-unsigned int
+_X_EXPORT unsigned int
 OMAPCalculateStride(unsigned int width, unsigned int bitsPerPixel)
 {
 	unsigned int alignedWidth;

@@ -125,6 +125,7 @@ typedef struct {
 	void *priv;			/* EXA submodule private data */
 	struct omap_bo *bo;
 	Bool tiled;
+	uint32_t flags;
 } OMAPPixmapPrivRec, *OMAPPixmapPrivPtr;
 
 #define OMAP_CREATE_PIXMAP_SCANOUT 0x80000000

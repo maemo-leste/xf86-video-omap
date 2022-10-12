@@ -22,6 +22,7 @@
 #endif
 
 #include <dlfcn.h>
+#include <sys/time.h>
 
 #include <exa.h>
 #include <gc.h>
@@ -38,6 +39,10 @@
 #include "omap_pvr_sgx.h"
 
 #define PVR_MAX_BO_MAPS 32
+/* semi-arbitrary value, maybe add new parameter */
+#define PVR_BO_CACHE_SIZE 4 * 1024 * 1024
+
+/* #define INSTRUMENT_BO_MAP */
 
 static PVRSolidOp gsSolidOp;
 static PVRCopyOp gsCopy2DOp;
@@ -165,10 +170,17 @@ sgxAccelDestroy(ScreenPtr pScreen, PVRPtr pPVR)
 }
 
 static void
-sgxMapInit(PVRPtr pPVR)
+sgxCacheInit(PVRPtr pPVR)
 {
 	xorg_list_init(&pPVR->map_list);
 	pPVR->map_count = 0;
+	xorg_list_init(&pPVR->bo_list);
+	pPVR->bo_count = 0;
+	pPVR->bo_size = 0;
+#ifdef INSTRUMENT_BO_CACHE
+	pPVR->bo_cache_hit = 0;
+	pPVR->bo_cache_miss = 0;
+#endif
 }
 
 static void
@@ -236,6 +248,11 @@ sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 	pvrPixmapPriv = pixmapPriv->priv;
 
 	if (!pvrPixmapPriv->meminfo.hPrivateData) {
+#ifdef INSTRUMENT_BO_MAP
+		struct timeval stop, start;
+
+		gettimeofday(&start, NULL);
+#endif
 		sgxMapUnmapLRU(pScreen, pPVR);
 
 		if (!PVRMapBo(pScreen, pPVR->srv, pOMAP->drmFD, pixmapPriv->bo,
@@ -244,6 +261,12 @@ sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 			pixmapPriv->priv = NULL;
 			return NULL;
 		}
+#ifdef INSTRUMENT_BO_MAP
+		gettimeofday(&stop, NULL);
+		DEBUG_MSG("PVRMapBo took %lu us",
+			  (stop.tv_sec - start.tv_sec) * 1000000 +
+			  stop.tv_usec - start.tv_usec);
+#endif
 	}
 
 	/*
@@ -279,12 +302,105 @@ sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv)
 	}
 }
 
-static Bool
-CloseScreen(CLOSE_SCREEN_ARGS_DECL)
+static void
+sgxBoCacheRemove(ScreenPtr pScreen, PVRPtr pPVR, BoCacheEntryPtr entry)
+{
+	PrivPixmapPtr priv = entry->priv;
+
+	if (priv && priv->meminfo.hPrivateData) {
+		sgxMapRemove(pScreen, pPVR, priv);
+		PVRUnMapBo(pScreen, pPVR->srv, &priv->meminfo);
+	}
+
+	free(entry->priv);
+	pPVR->bo_size -= omap_bo_size(entry->bo);
+	pPVR->bo_count--;
+	omap_bo_del(entry->bo);
+	xorg_list_del(&entry->list);
+	free(entry);
+}
+
+static struct omap_bo *
+sgxBoCacheGet(ScreenPtr pScreen, uint32_t size, void **priv)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	PVRPtr pPVR = PVREXAPTR(pScrn);
+	BoCacheEntryPtr entry = NULL;
+
+	size = (size + (4096 - 1)) & ~(4096 - 1);
+
+#ifdef INSTRUMENT_BO_CACHE
+	DEBUG_MSG("%s cache stats: hits %lu, misses %lu", __func__,
+		  pPVR->bo_cache_hit, pPVR->bo_cache_miss);
+#endif
+	xorg_list_for_each_entry(entry, &pPVR->bo_list, list) {
+		if (omap_bo_size(entry->bo) == size) {
+			struct omap_bo *bo = entry->bo;
+
+			*priv = entry->priv;
+			pPVR->bo_count--;
+			pPVR->bo_size -= omap_bo_size(bo);
+			xorg_list_del(&entry->list);
+			free(entry);
+			DEBUG_MSG("%s cache hit entries %lu, bo %p, block size %u",
+				  __func__, pPVR->bo_count, bo, size);
+#ifdef INSTRUMENT_BO_CACHE
+			pPVR->bo_cache_hit++;
+#endif
+			return bo;
+		}
+	}
+
+	DEBUG_MSG("%s cache miss for size %u", __func__, size);
+#ifdef INSTRUMENT_BO_CACHE
+	pPVR->bo_cache_miss++;
+#endif
+	return NULL;
+}
+
+static Bool
+sgxBoCachePut(ScreenPtr pScreen, struct omap_bo *bo, PrivPixmapPtr priv)
+{
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	PVRPtr pPVR = PVREXAPTR(pScrn);
+	BoCacheEntryPtr entry;
+
+	if (!bo)
+		return FALSE;
+
+	entry = calloc(sizeof(BoCacheEntryRec), 1);
+	entry->bo = bo;
+	entry->priv = priv;
+	pPVR->bo_count++;
+	pPVR->bo_size += omap_bo_size(bo);
+	xorg_list_append(&entry->list, &pPVR->bo_list);
+
+	while (pPVR->bo_size > PVR_BO_CACHE_SIZE) {
+		entry = xorg_list_first_entry(&pPVR->bo_list, BoCacheEntryRec,
+					      list);
+		sgxBoCacheRemove(pScreen, pPVR, entry);
+	}
+
+	DEBUG_MSG("%s bo %p put in cache, block size %u, entries count %lu, total %lu KiB",
+		  __func__, bo, omap_bo_size(bo), pPVR->bo_count,
+		  pPVR->bo_size / 1024);
+
+	return TRUE;
+}
+
+static Bool
+CloseScreen(CLOSE_SCREEN_ARGS_DECL)
+{
+	BoCacheEntryPtr entry, tmp;
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	PVRPtr pPVR = PVREXAPTR(pScrn);
 	OMAPPtr pOMAP = OMAPPTR_FROM_SCREEN(pScreen);
+
+	xorg_list_for_each_entry_safe(entry, tmp, &pPVR->bo_list, list)
+		sgxBoCacheRemove(pScreen, pPVR, entry);
+
+	DEBUG_MSG("%s bo cache size after cleanup %lu",
+		  __func__, pPVR->bo_count);
 
 	if (pPVR->scanout_priv) {
 		PrivPixmapPtr pvrPixmapPriv = pPVR->scanout_priv;
@@ -316,7 +432,23 @@ FreeScreen(FREE_SCREEN_ARGS_DECL)
 static void
 sgxDestroyPixmap(ScreenPtr pScreen, void *driverPriv)
 {
-	sgxUnmapPixmapBo(pScreen, driverPriv);
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	OMAPPixmapPrivPtr pixmapPriv = driverPriv;
+
+	DEBUG_MSG("%s", __func__);
+
+	if ((pixmapPriv->flags & OMAP_BO_WC) &&
+	    (pixmapPriv->flags & ~OMAP_BO_WC) == 0) {
+		if (!sgxBoCachePut(pScreen, pixmapPriv->bo, pixmapPriv->priv))
+			sgxUnmapPixmapBo(pScreen, driverPriv);
+		else {
+			/* cache takes ownership */
+			pixmapPriv->bo = NULL;
+			pixmapPriv->priv = NULL;
+		}
+	} else
+		sgxUnmapPixmapBo(pScreen, driverPriv);
+
 	OMAPDestroyPixmap(pScreen, driverPriv);
 }
 
@@ -324,15 +456,61 @@ static Bool
 sgxModifyPixmapHeader(PixmapPtr pPixmap, int width, int height, int depth,
 		      int bitsPerPixel, int devKind, pointer pPixData)
 {
-	Bool res;
-	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+	ScreenPtr pScreen = pPixmap->drawable.pScreen;
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
+	uint32_t size;
+	Bool ret;
 
-	sgxUnmapPixmapBo(pPixmap->drawable.pScreen, pixmapPriv);
+	if (pPixmap->usage_hint & (OMAP_CREATE_PIXMAP_TILED |
+				   OMAP_CREATE_PIXMAP_SCANOUT |
+				   OMAP_CREATE_PIXMAP_XV) ||
+	    pPixData) {
+		sgxUnmapPixmapBo(pScreen, priv);
+		return OMAPModifyPixmapHeader(pPixmap, width, height, depth,
+					      bitsPerPixel, devKind, pPixData);
+	}
 
-	res = OMAPModifyPixmapHeader(pPixmap, width, height, depth,
-				     bitsPerPixel, devKind, pPixData);
+	ret = miModifyPixmapHeader(pPixmap, width, height, depth,
+			bitsPerPixel, devKind, NULL);
+	if (!ret)
+		return ret;
 
-	return res;
+	width	= pPixmap->drawable.width;
+	height	= pPixmap->drawable.height;
+	depth	= pPixmap->drawable.depth;
+	bitsPerPixel = pPixmap->drawable.bitsPerPixel;
+	pPixmap->devKind = OMAPCalculateStride(width, bitsPerPixel);
+	size = pPixmap->devKind * height;
+
+	if ((!priv->bo) || (omap_bo_size(priv->bo) != size)) {
+		struct omap_bo *bo;
+
+		if (sgxBoCachePut(pScreen, priv->bo, priv->priv)) {
+			priv->bo = NULL;
+			priv->priv = NULL;
+		}
+
+		bo = sgxBoCacheGet(pScreen, size, &priv->priv);
+
+		if (!bo) {
+			sgxUnmapPixmapBo(pScreen, priv);
+			omap_bo_del(priv->bo);
+			priv->bo = omap_bo_new(pOMAP->dev, size, OMAP_BO_WC);
+		} else
+			priv->bo = bo;
+
+		priv->flags = OMAP_BO_WC;
+		priv->tiled = FALSE;
+	}
+
+	if (!priv->bo) {
+		ERROR_MSG("failed to allocate %dx%d bo, size=%d",
+			  width, height, size);
+	}
+
+	return priv->bo != NULL;
 }
 
 static IMG_BOOL
@@ -1084,8 +1262,7 @@ sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 
-	sgxMapInit(pPVR);
-
+	sgxCacheInit(pPVR);
 	PVRInitServices(pScrn);
 
 	if (!InitialiseServices(pScreen, &pPVR->srv)) {

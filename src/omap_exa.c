@@ -181,6 +181,9 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 	if (!priv->bo) {
 		DEBUG_MSG("failed to allocate %dx%d bo, size=%d, flags=%08x",
 				width, height, size, flags);
+		priv->flags = 0;
+	} else {
+		priv->flags = flags;
 	}
 
 	return priv->bo != NULL;

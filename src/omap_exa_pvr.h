@@ -34,6 +34,7 @@ typedef struct
 	PVR2DCONTEXTHANDLE hPVR2DContext;
 } PVRSERVICES, *PPVRSERVICES;
 
+/* #define INSTRUMENT_BO_CACHE */
 typedef struct PVR
 {
 	OMAPEXARec base;
@@ -43,6 +44,14 @@ typedef struct PVR
 	/* LRU BO maps */
 	struct xorg_list map_list;
 	unsigned long map_count;
+	/* cached BOs, i.e */
+	struct xorg_list bo_list;
+	unsigned long bo_count;
+	unsigned long bo_size;
+#ifdef INSTRUMENT_BO_CACHE
+	unsigned long bo_cache_hit;
+	unsigned long bo_cache_miss;
+#endif
 } PVRRec, *PVRPtr;
 
 typedef struct PrivPixmap
@@ -50,6 +59,13 @@ typedef struct PrivPixmap
 	PVR2DMEMINFO meminfo;
 	struct xorg_list map;
 } PrivPixmapRec, *PrivPixmapPtr;
+
+typedef struct BoCacheEntry
+{
+	struct omap_bo *bo;
+	PrivPixmapPtr priv;
+	struct xorg_list list;
+} BoCacheEntryRec, *BoCacheEntryPtr;
 
 typedef enum
 {
