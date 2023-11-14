@@ -1,3 +1,9 @@
+xf86-video-omap (0.6.2) unstable; urgency=medium
+
+  * PVR: XV: Support 16bpp
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Tue, 14 Nov 2023 10:59:28 +0200
+
 xf86-video-omap (0.6.1) unstable; urgency=medium
 
   * EXA: PVR: Implement pixmap BO cache
