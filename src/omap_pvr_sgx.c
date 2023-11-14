@@ -100,13 +100,15 @@ PUT_TEXTURE_IMAGE_FN_DEF(343x)
 	int dst_x1;
 	int dst_y1;
 
-	if (bitsPerPixel != 32 && bitsPerPixel != 8)
+	if (bitsPerPixel != 32 && bitsPerPixel != 16 && bitsPerPixel != 8)
 		return FALSE;
 
 	pContext = (PVR2DCONTEXT *)pPVR->srv->hPVR2DContext;
 
 	if (bitsPerPixel == 8)
 		fmt = PVRSRV_PIXEL_FORMAT_A8;
+	else if (bitsPerPixel == 16)
+		fmt = PVRSRV_PIXEL_FORMAT_RGB565;
 	else
 		fmt = PVRSRV_PIXEL_FORMAT_XRGB8888;
 
