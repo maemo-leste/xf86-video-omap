@@ -157,7 +157,14 @@ sgxWaitPixmap(PixmapPtr pPixmap)
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
 
-    if (pixmapPriv->bo != pOMAP->scanout)
+	/* Do not wait for blits to complete on scanout buffer as omapdrm will
+	 * wait on pvr fence anyways.
+	 *
+	 * BUG: It should not matter manual update or not, but for some reason
+	 * it does. For now just wait for blits to complete on manual update
+	 * devices until we find what's going wrong.
+	 */
+	if (pixmapPriv->bo != pOMAP->scanout || pOMAP->ManualUpdate)
 		waitForBlitsCompleteOnDeviceMem(pPixmap);
 
 	drmmode_flush_scanout(pScrn);
