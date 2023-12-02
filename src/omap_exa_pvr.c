@@ -154,8 +154,12 @@ void
 sgxWaitPixmap(PixmapPtr pPixmap)
 {
 	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
 
-	waitForBlitsCompleteOnDeviceMem(pPixmap);
+    if (pixmapPriv->bo != pOMAP->scanout)
+		waitForBlitsCompleteOnDeviceMem(pPixmap);
+
 	drmmode_flush_scanout(pScrn);
 }
 
