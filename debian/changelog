@@ -1,3 +1,9 @@
+xf86-video-omap (0.6.3) unstable; urgency=medium
+
+  * PVR: EXA: Do not wait for blits to complete on scanout buffer
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Sat, 02 Dec 2023 09:00:34 +0200
+
 xf86-video-omap (0.6.2) unstable; urgency=medium
 
   * PVR: XV: Support 16bpp
