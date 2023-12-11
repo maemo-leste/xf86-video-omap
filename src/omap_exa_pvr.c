@@ -44,10 +44,15 @@
 
 /* #define INSTRUMENT_BO_MAP */
 
+/* seems to be slower, also, transparency is broken */
+/* #define USE_HW_COMPOSITING */
+
 static PVRSolidOp gsSolidOp;
 static PVRCopyOp gsCopy2DOp;
+static PVRRenderOp gsRenderOp;
 
-static Bool copy2d(int bitsPerPixel)
+static Bool
+copy2d(int bitsPerPixel)
 {
 	return bitsPerPixel != 8;
 }
@@ -194,9 +199,6 @@ static void
 sgxAccelDestroy(ScreenPtr pScreen, PVRPtr pPVR)
 {
 	PVRUseDeInit(pScreen, pPVR);
-	/*
-	PVRRenderDestroy(pScreen);
-	*/
 	DeInitialiseServices(pScreen, pPVR->srv);
 }
 
@@ -1225,19 +1227,420 @@ sgxDoneCopy(PixmapPtr pPixmap)
 	gsCopy2DOp.renderOp.pDest = NULL;
 }
 
-static Bool
-CheckCompositeFail(int op, PicturePtr pSrcPicture, PicturePtr pMaskPicture,
-		   PicturePtr pDstPicture)
+static RENDER_TRANSFORMATION
+PVRGetTransformation(PictTransformPtr psTransform)
 {
-	return FALSE;
+	double m00;
+	double m01;
+	double m10;
+	double m11;
+
+	if (!psTransform)
+		return TRANSF_NONE;
+
+	m00 = (double)psTransform->matrix[0][0] / 65536.0;
+	m01 = (double)psTransform->matrix[0][1] / 65536.0;
+	m10 = (double)psTransform->matrix[1][0] / 65536.0;
+	m11 = (double)psTransform->matrix[1][1] / 65536.0;
+
+	if (m00 > 0.0 && m11 > 0.0 && m01 == 0.0 && m10 == 0.0)
+		return TRANSF_NONE;
+
+	if (m01 > 0.0 && m10 < 0.0 && m00 == 0.0 && m11 == 0.0)
+		return TRANSF_ROT_90;
+
+	if (m00 >= 0.0 || m11 >= 0.0 || m01 != 0.0 || m10 != 0.0) {
+		if (m01 >= 0.0 || m10 <= 0.0 || m00 != 0.0 || m11 != 0.0) {
+			if (pixman_transform_is_scale(psTransform))
+				return TRANSF_SCALE;
+			else
+				return TRANSF_UNKNOWN;
+		}
+		else
+			return TRANSF_ROT_270;
+	}
+
+	return TRANSF_ROT_180;
+}
+
+static PVR2D_HANDLE
+PVRRenderIsAccelerated(ScreenPtr pScreen, PVRRenderOp *pRender)
+{
+	PicturePtr pDestPicture = pRender->pDestPicture;
+	PicturePtr pSrcPicture = pRender->pSrcPicture;
+	PicturePtr pMaskPicture = pRender->pMaskPicture;
+	PixmapPtr pDest = pRender->pDest;
+	PixmapPtr pSrc = pRender->pSrc;
+	PixmapPtr pMask = pRender->pMask;
+	unsigned int destFormat;
+	unsigned int maskFormat;
+	unsigned int srcFormat;
+
+	if (!pDestPicture || !pDest)
+		return NULL;
+
+	if (pSrcPicture && !pSrc)
+		return NULL;
+
+	if (pMaskPicture && !pMask)
+		return NULL;
+
+	destFormat = pDestPicture->format;
+
+	if (destFormat != PICT_a8r8g8b8 && destFormat != PICT_a8b8g8r8 &&
+	    destFormat != PICT_x8r8g8b8 && destFormat != PICT_x8b8g8r8 &&
+	    destFormat != PICT_a8) {
+		return NULL;
+	}
+
+	if (pSrcPicture->repeatType &&
+	    pSrc->drawable.width != 1 &&
+	    pSrc->drawable.height != 1) {
+		return NULL;
+	}
+
+	if (pMask) {
+		if (pMaskPicture->repeatType &&
+		    pMask->drawable.width != 1 &&
+		    pMask->drawable.height != 1) {
+			return NULL;
+		}
+	}
+
+	if (pSrcPicture) {
+		srcFormat = pSrcPicture->format;
+
+		if (srcFormat != PICT_a8r8g8b8 && srcFormat != PICT_a8b8g8r8 &&
+		    srcFormat != PICT_x8r8g8b8 && srcFormat != PICT_x8b8g8r8 &&
+		    srcFormat != PICT_a8) {
+			return NULL;
+		}
+
+		if (pSrcPicture->transform) {
+			pRender->transform = PVRGetTransformation(
+						     pSrcPicture->transform);
+
+			switch (pRender->transform) {
+				case TRANSF_UNKNOWN:
+					return NULL;
+				case TRANSF_ROT_90:
+				case TRANSF_ROT_180:
+				case TRANSF_ROT_270:
+					if (!pMaskPicture &&
+					    pRender->op == PictOpSrc)
+						return PVRGetUseCodeForRender(pRender);
+
+					return NULL;
+				default:
+					break;
+			}
+		}
+	}
+
+	if (!pMaskPicture)
+		return PVRGetUseCodeForRender(pRender);
+
+	if (pMaskPicture->transform &&
+	    PVRGetTransformation(pMaskPicture->transform)) {
+		return NULL;
+	}
+
+	maskFormat = pMaskPicture->format;
+
+	if (maskFormat != PICT_a8r8g8b8 && maskFormat != PICT_a8b8g8r8 &&
+	    maskFormat != PICT_x8r8g8b8 && maskFormat != PICT_x8b8g8r8 &&
+	    maskFormat != PICT_a8) {
+		return NULL;
+	}
+
+	return PVRGetUseCodeForRender(pRender);
 }
 
 static Bool
-PrepareCompositeFail(int op, PicturePtr pSrcPicture, PicturePtr pMaskPicture,
+sgxCheckComposite(int op, PicturePtr pSrcPicture, PicturePtr pMaskPicture,
+		  PicturePtr pDstPicture)
+{
+#ifndef USE_HW_COMPOSITING
+	if (1) {
+#else
+	if (0) {
+#endif
+		sgxWaitPixmap(gsRenderOp.pSrc);
+		sgxWaitPixmap(gsRenderOp.pDest);
+		sgxWaitPixmap(gsRenderOp.pMask);
+
+		return FALSE;
+	}
+
+	memset(&gsRenderOp, 0, sizeof(gsRenderOp));
+
+	gsRenderOp.op = op;
+
+	gsRenderOp.pDestPicture = pDstPicture;
+	gsRenderOp.pSrcPicture = pSrcPicture;
+	gsRenderOp.pMaskPicture = pMaskPicture;
+
+	gsRenderOp.pDest = draw2pix(pDstPicture->pDrawable);
+
+	if (pSrcPicture)
+		gsRenderOp.pSrc = draw2pix(pSrcPicture->pDrawable);
+	else
+		gsRenderOp.pSrc = NULL;
+
+	if (pMaskPicture)
+		gsRenderOp.pMask = draw2pix(pMaskPicture->pDrawable);
+	else
+		gsRenderOp.pMask = NULL;
+
+	gsRenderOp.destForceAlpha = FALSE;
+	gsRenderOp.srcForceAlpha = FALSE;
+
+	gsRenderOp.hCode = PVRRenderIsAccelerated(
+				   pDstPicture->pDrawable->pScreen,
+				   &gsRenderOp);
+
+	if (pSrcPicture)
+		gsRenderOp.srcRepeatType = pSrcPicture->repeatType;
+	else
+		gsRenderOp.srcRepeatType = SGXTQ_RENDER_RECTS_REPEAT_NONE;
+
+	if (pMaskPicture)
+		gsRenderOp.maskRepeatType = pMaskPicture->repeatType;
+	else
+		gsRenderOp.maskRepeatType = SGXTQ_RENDER_RECTS_REPEAT_NONE;
+
+	if (gsRenderOp.hCode) {
+		gsRenderOp.handleDestDamage = FALSE;
+		sgxCompositeResetCoordinates(&gsRenderOp);
+	}
+
+	if (!gsRenderOp.hCode) {
+		sgxWaitPixmap(gsRenderOp.pSrc);
+		sgxWaitPixmap(gsRenderOp.pDest);
+		sgxWaitPixmap(gsRenderOp.pMask);
+
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static Bool
+sgxPrepareComposite(int op, PicturePtr pSrcPicture, PicturePtr pMaskPicture,
 		     PicturePtr pDstPicture, PixmapPtr pSrc, PixmapPtr pMask,
 		     PixmapPtr pDst)
 {
-	return FALSE;
+	return TRUE;
+}
+
+static void
+PVRApplyTransformation(PictTransformPtr psTransform, int *iStartX, int *iStartY,
+		       int *iWidth, int *iHeight)
+{
+	PictVector v;
+	int iSrcX1;
+	int iSrcY1;
+	int iSrcX2;
+	int iSrcY2;
+	int iRealStartX;
+	int iRealStartY;
+	int iRealEndX;
+	int iRealEndY;
+
+	v.vector[0] = IntToxFixed(*iStartX);
+	v.vector[1] = IntToxFixed(*iStartY);
+	v.vector[2] = xFixed1;
+	PictureTransformPoint(psTransform, &v);
+	iSrcX1 = xFixedToInt(v.vector[0]);
+	iSrcY1 = xFixedToInt(v.vector[1]);
+
+	v.vector[0] = IntToxFixed(*iStartX + *iWidth);
+	v.vector[1] = IntToxFixed(*iStartY + *iHeight);
+	v.vector[2] = xFixed1;
+	PictureTransformPoint(psTransform, &v);
+	iSrcX2 = xFixedToInt(v.vector[0]);
+	iSrcY2 = xFixedToInt(v.vector[1]);
+
+	iRealStartX = iSrcX2 < iSrcX1 ? iSrcX2 : iSrcX1;
+	iRealStartY = iSrcY2 < iSrcY1 ? iSrcY2 : iSrcY1;
+	iRealEndX = iSrcX2 >= iSrcX1 ? iSrcX2 : iSrcX1;
+	iRealEndY = iSrcY2 >= iSrcY1 ? iSrcY2 : iSrcY1;
+
+	*iStartX = iRealStartX;
+	*iStartY = iRealStartY;
+	*iWidth = iRealEndX - iRealStartX;
+	*iHeight = iRealEndY - iRealStartY;
+}
+
+static Bool
+sgxCompositeNextBatch(ScreenPtr pScreen, IMG_BOOL lastBatch)
+{
+	Bool rv;
+
+	if (lastBatch) {
+		if (!gsRenderOp.numBltRects)
+			return FALSE;
+	} else if (gsRenderOp.numBltRects < MAX_COPY_BATCH_RECTS) {
+		gsRenderOp.bltRectsIdx++;
+		return TRUE;
+	}
+
+	if ((rv = sgxCompositeValidateBoundingBox(&gsRenderOp))) {
+		rv = PVRRender(pScreen, &gsRenderOp);
+		sgxCompositeResetCoordinates(&gsRenderOp);
+	}
+
+	return rv;
+}
+
+inline static Bool
+clamp(int *val, int low, int high)
+{
+	int tmp = ((*val) > (high)) ?
+			  (high) : (((*val) < (low)) ? (low) : (*val));
+	Bool clamped = tmp != *val;
+
+	*val = tmp;
+
+	return clamped;
+}
+
+static void
+sgxComposite(PixmapPtr pDstPixmap, int srcX, int srcY, int maskX, int maskY,
+	     int dstX, int dstY, int width, int height)
+{
+	PicturePtr pDestPicture = gsRenderOp.pDestPicture;
+	PicturePtr pMaskPicture = gsRenderOp.pMaskPicture;
+	PicturePtr pSrcPicture = gsRenderOp.pSrcPicture;
+	Bool badMask = FALSE;
+	int iRealMaskWidth = width;
+	int iRealDestWidth = width;
+	int iRealSrcWidth = width;
+	int iRealMaskHeight = height;
+	int iRealDestHeight = height;
+	int iRealSrcHeight = height;
+	IMG_INT bltRectsIdx = gsRenderOp.bltRectsIdx;
+	ScreenPtr pScreen = pDstPixmap->drawable.pScreen;
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	SGXHW_RENDER_RECTS *destRect;
+	SGXHW_RENDER_RECTS *srcRect;
+
+	if (pMaskPicture)
+		badMask = pMaskPicture->transform != NULL;
+
+	if (pSrcPicture->transform) {
+		PVRApplyTransformation(pSrcPicture->transform, &srcX, &srcY,
+				       &iRealSrcWidth, &iRealSrcHeight);
+	}
+
+	if (pSrcPicture->repeatType != RepeatNone) {
+		srcX = 0;
+		srcY = 0;
+		iRealSrcWidth = 1;
+		iRealSrcHeight = 1;
+	} else {
+		int h = pSrcPicture->pDrawable->height;
+		int w = pSrcPicture->pDrawable->width;
+
+		clamp(&srcX, 0, w - 1);
+		clamp(&srcY, 0, h - 1);
+		clamp(&iRealSrcWidth, 0, w - srcX);
+		clamp(&iRealSrcHeight, 0, h - srcY);
+	}
+
+	if (pMaskPicture) {
+		if (pMaskPicture->transform) {
+			PVRApplyTransformation(pMaskPicture->transform,
+					       &maskX, &maskY,
+					       &iRealMaskWidth, &iRealMaskHeight);
+		}
+
+		if (pMaskPicture->repeatType != RepeatNone) {
+			maskX = 0;
+			maskY = 0;
+			iRealMaskWidth = 1;
+			iRealMaskHeight = 1;
+		} else {
+			int h = pMaskPicture->pDrawable->height;
+			int w = pMaskPicture->pDrawable->width;
+
+			badMask |= clamp(&maskX, 0, w - 1);
+			badMask |= clamp(&maskY, 0, h - 1);
+			badMask |= clamp(&iRealMaskWidth, 0, w - maskX);
+			badMask |= clamp(&iRealMaskHeight, 0, h - maskY);
+		}
+	}
+
+	if (pDestPicture->transform) {
+		PVRApplyTransformation(pDestPicture->transform, &dstX, &dstY,
+				       &iRealDestWidth, &iRealDestHeight);
+	}
+
+	if (pDestPicture->repeatType != RepeatNone) {
+		dstX = 0;
+		dstY = 0;
+		iRealDestWidth = 1;
+		iRealDestHeight = 1;
+	} else {
+		int h = pDestPicture->pDrawable->height;
+		int w = pDestPicture->pDrawable->width;
+
+		clamp(&dstX, 0, w - 1);
+		clamp(&dstY, 0, h - 1);
+		clamp(&iRealDestWidth, 0, w - dstX);
+		clamp(&iRealDestHeight, 0, h - dstY);
+	}
+
+	if (badMask) {
+		ERROR_MSG("Composite failed: coordinate values out of range");
+		return;
+	}
+
+	destRect = &gsRenderOp.bltRects.destRect[bltRectsIdx];
+	destRect->x0 = dstX;
+	destRect->x1 = dstX + iRealDestWidth;
+	destRect->y0 = dstY;
+	destRect->y1 = dstY + iRealDestHeight;
+	pvrAddRectToBoundingBox(&gsRenderOp.bltRects.destBoundBox, destRect,
+				&gsRenderOp.bltRects.destSurfaceBox);
+
+	srcRect = &gsRenderOp.bltRects.srcRect[bltRectsIdx];
+	srcRect->x0 = srcX;
+	srcRect->x1 = srcX + iRealSrcWidth;
+	srcRect->y0 = srcY;
+	srcRect->y1 = srcY + iRealSrcHeight;
+	pvrAddRectToBoundingBox(&gsRenderOp.bltRects.srcBoundBox, srcRect,
+				&gsRenderOp.bltRects.srcSurfaceBox);
+
+	if (gsRenderOp.pMask) {
+		SGXHW_RENDER_RECTS *maskRect =
+				&gsRenderOp.bltRects.maskRect[bltRectsIdx];
+
+		maskRect->x0 = maskX;
+		maskRect->x1 = maskX + iRealMaskWidth;
+		maskRect->y0 = maskY;
+		maskRect->y1 = maskY + iRealMaskHeight;
+		pvrAddRectToBoundingBox(&gsRenderOp.bltRects.maskBoundBox,
+					maskRect,
+					&gsRenderOp.bltRects.maskSurfaceBox);
+	}
+
+	gsRenderOp.numBltRects++;
+
+	if (!sgxCompositeNextBatch(pScreen, FALSE))
+		ERROR_MSG("sgxComposite: GPU failed to perform composite operation!!!");
+}
+
+static void
+sgxDoneComposite(PixmapPtr pDst)
+{
+	sgxCompositeNextBatch(pDst->drawable.pScreen, TRUE);
+
+	setPixmapOnGPU(pDst);
+	flushScanout(pDst);
+
+	gsRenderOp.pDest = NULL;
+	gsRenderOp.hCode = NULL;
 }
 
 static Bool
@@ -1333,6 +1736,28 @@ GetFormats(unsigned int *formats)
 	return i;
 }
 
+static Bool
+sgxPrepareAccess(PixmapPtr pPixmap, int index)
+{
+	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
+
+	if (!pPixmap->devPrivate.ptr) {
+		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+		if (!pPixmap->devPrivate.ptr) {
+			return FALSE;
+		}
+	}
+
+	sgxWaitPixmap(pPixmap);
+
+	return TRUE;
+}
+
+static void
+sgxFinishAccess(PixmapPtr pPixmap, int index)
+{
+}
+
 _X_EXPORT OMAPEXAPtr
 InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 {
@@ -1376,8 +1801,8 @@ InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 	exa->CreatePixmap2 = OMAPCreatePixmap;
 	exa->DestroyPixmap = sgxDestroyPixmap;
 	exa->ModifyPixmapHeader = sgxModifyPixmapHeader;
-	exa->PrepareAccess = OMAPPrepareAccess;
-	exa->FinishAccess = OMAPFinishAccess;
+	exa->PrepareAccess = sgxPrepareAccess;
+	exa->FinishAccess = sgxFinishAccess;
 	exa->PixmapIsOffscreen = OMAPPixmapIsOffscreen;
 	exa->PrepareSolid = sgxPrepareSolid;
 	exa->Solid = sgxSolid;
@@ -1387,15 +1812,11 @@ InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 	exa->Copy = sgxCopy;
 	exa->DoneCopy = sgxDoneCopy;
 
-#if 0
 	exa->CheckComposite = sgxCheckComposite;
 	exa->PrepareComposite = sgxPrepareComposite;
 	exa->Composite = sgxComposite;
 	exa->DoneComposite = sgxDoneComposite;
-#else
-	exa->CheckComposite = CheckCompositeFail;
-	exa->PrepareComposite = PrepareCompositeFail;
-#endif
+
 	if (!exaDriverInit(pScreen, exa)) {
 		ERROR_MSG("exaDriverInit failed");
 		goto fail;

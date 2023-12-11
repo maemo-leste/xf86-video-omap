@@ -172,6 +172,35 @@ typedef struct _SGXTQ_TQSURFACE_
 	IMG_UINT32 ui32ChromaPlaneOffset[2];
 } SGXTQ_SURFACE;
 
+typedef struct _SGXTQ_CUSTOMSHADEROP_
+{
+  IMG_DEV_VIRTADDR sUSEExecAddr;
+  IMG_UINT32 ui32NumPAs;
+  IMG_UINT32 ui32NumSAs;
+  IMG_UINT32 UseParams[2];
+  IMG_UINT32 ui32NumTempRegs;
+  IMG_BOOL bUseDMAForSAs;
+  IMG_DEV_VIRTADDR sDevVAddrDMASrc;
+  IMG_UINT32 ui32LineOffset;
+  SGXTQ_ROTATION eRotation;
+  SGXTQ_FILTERTYPE aeFilter[3];
+} SGXTQ_CUSTOMSHADEROP;
+
+typedef enum _SGXTQ_ATLAS_OPTYPE_
+{
+  PICT_OP_OVER = 0x0,
+  PICT_OP_ADD = 0x1
+} SGXTQ_ATLAS_OPTYPE;
+
+typedef struct _SGXTQ_TATLASBLITOP_
+{
+  SGXTQ_ALPHA eAlpha;
+  IMG_UINT32 ui32NumMappings;
+  IMG_RECT *psSrcRects;
+  IMG_RECT *psDstRects;
+  SGXTQ_ATLAS_OPTYPE eOp;
+} SGXTQ_TATLASBLITOP;
+
 typedef struct _SGX_QUEUETRANSFER_
 {
 	IMG_UINT32 ui32Flags;
@@ -181,6 +210,8 @@ typedef struct _SGX_QUEUETRANSFER_
 		SGXTQ_BLITOP sBlit;
 		SGXTQ_FILLOP sFill;
 		SGXTQ_VPBLITOP sVPBlit;
+		SGXTQ_TATLASBLITOP sTAtlas;
+		SGXTQ_CUSTOMSHADEROP sCustomShader;
 #if defined SGX_OMAP_443x
 		char padding[164];
 #elif defined SGX_OMAP_343x

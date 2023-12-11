@@ -24,7 +24,7 @@
 #include <exa.h>
 
 #include "omap_driver.h"
-#include "omap_exa.h"
+#include "omap_exa_pvr.h"
 #include "omap_pvr_sgx.h"
 
 PUT_TEXTURE_IMAGE_FN_DEF(wrap)
@@ -57,4 +57,32 @@ PUT_TEXTURE_IMAGE_FN_DEF(wrap)
 	return PutTextureImageProc(pSrcPix, pSrcBox, pOsdPix, pOsdBox,
 				   pDstPix, pDstBox, extraCount, extraPix,
 				   format);
+}
+
+Bool
+PVRRender(ScreenPtr pScreen, PVRRenderOp *pRenderOp)
+{
+	static Bool (*PVRRenderProc)
+			(ScreenPtr pScreen, PVRRenderOp *pRenderOp) = NULL;
+
+	if (!PVRRenderProc) {
+		ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+		OMAPPtr pOMAP = OMAPPTR(pScrn);
+
+		if (pOMAP->chipset <= 0x34FF)
+			PVRRenderProc = PVRRender_DEVICE(343x);
+		else if (pOMAP->chipset >= 0x4430 && pOMAP->chipset <= 0x443F)
+			PVRRenderProc = PVRRender_DEVICE(443x);
+		else {
+			static Bool once = TRUE;
+			if (once) {
+				ERROR_MSG("Unsupported chipset %x",
+					  pOMAP->chipset);
+				once = FALSE;
+			}
+			return FALSE;
+		}
+	}
+
+	return PVRRenderProc(pScreen, pRenderOp);
 }

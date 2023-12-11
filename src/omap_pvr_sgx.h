@@ -36,4 +36,13 @@ PUT_TEXTURE_IMAGE_FN_DEF(wrap);
 
 #define PUT_TEXTURE_IMAGE_FN PUT_TEXTURE_IMAGE_FN_NAME(wrap)
 
+#define PVRRender_DEVICE(omap) PVRRender_##omap
+#define PVRRender_DEVICE_DEF(omap) \
+	Bool PVRRender_DEVICE(omap) (ScreenPtr pScreen, PVRRenderOp *pRenderOp)
+
+PVRRender_DEVICE_DEF(443x);
+PVRRender_DEVICE_DEF(343x);
+
+Bool PVRRender(ScreenPtr pScreen, PVRRenderOp *pRenderOp);
+
 #endif /* __OMAP_PVR_SGX_H_INCLUDED__ */

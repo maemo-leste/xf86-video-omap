@@ -26,4 +26,7 @@ void PVRUseDeInit(ScreenPtr pScreen, PVRPtr pPVR);
 PVR2D_HANDLE PVRSolid8BitGetUse(int alu);
 PVR2D_HANDLE PVRGetUseCodeCopyAlphaFill(void);
 
+PVR2D_HANDLE
+PVRGetUseCodeForRender(PVRRenderOp *pRender);
+
 #endif /* __OMAP_PVR_USE_H__ */
