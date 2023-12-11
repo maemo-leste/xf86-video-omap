@@ -216,7 +216,8 @@ PUT_TEXTURE_IMAGE_FN_DEF(343x)
 	err = SGXQueueTransfer(pContext->hTransferContext, &sBlitInfo);
 
 	if (err == PVRSRV_OK) {
-		sgxWaitPixmap(pDstPix);
+		setPixmapOnGPU(pDstPix);
+		flushScanout(pDstPix);
 		return TRUE;
 	}
 

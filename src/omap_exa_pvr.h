@@ -58,6 +58,7 @@ typedef struct PrivPixmap
 {
 	PVR2DMEMINFO meminfo;
 	struct xorg_list map;
+	Bool is_gpu;
 } PrivPixmapRec, *PrivPixmapPtr;
 
 typedef struct BoCacheEntry
@@ -193,6 +194,8 @@ PVREXAPTR(ScrnInfoPtr pScrn)
 
 void sgxUnmapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
 PrivPixmapPtr sgxMapPixmapBo(ScreenPtr pScreen, OMAPPixmapPrivPtr pixmapPriv);
-void sgxWaitPixmap(PixmapPtr pPixmap);
+
+void setPixmapOnGPU(PixmapPtr pPixmap);
+void flushScanout(PixmapPtr pPixmap);
 
 #endif /* __OMAP_EXA_PVR_H__ */

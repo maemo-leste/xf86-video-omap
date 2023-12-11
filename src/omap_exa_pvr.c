@@ -150,24 +150,44 @@ waitForBlitsCompleteOnDeviceMem(PixmapPtr pPixmap)
 	}
 }
 
-void
+static void
 sgxWaitPixmap(PixmapPtr pPixmap)
 {
-	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
+	OMAPPixmapPrivPtr pixmapPriv;
+	PrivPixmapPtr priv;
 
-	/* Do not wait for blits to complete on scanout buffer as omapdrm will
-	 * wait on pvr fence anyways.
-	 *
-	 * BUG: It should not matter manual update or not, but for some reason
-	 * it does. For now just wait for blits to complete on manual update
-	 * devices until we find what's going wrong.
-	 */
-	if (pixmapPriv->bo != pOMAP->scanout || pOMAP->ManualUpdate)
+	if (!pPixmap)
+		return;
+
+	pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
+	priv = pixmapPriv->priv;
+
+	if (priv && priv->is_gpu) {
+		priv->is_gpu = FALSE;
 		waitForBlitsCompleteOnDeviceMem(pPixmap);
+	}
+}
 
-	drmmode_flush_scanout(pScrn);
+void
+flushScanout(PixmapPtr pPixmap)
+{
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+
+	if (pOMAP->ManualUpdate && pixmapPriv->bo == pOMAP->scanout) {
+		sgxWaitPixmap(pPixmap);
+		drmmode_flush_scanout(pScrn);
+	}
+}
+
+void
+setPixmapOnGPU(PixmapPtr pPixmap)
+{
+	OMAPPixmapPrivPtr pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
+	PrivPixmapPtr priv = pixmapPriv->priv;
+
+	priv->is_gpu = TRUE;
 }
 
 static void
@@ -930,7 +950,9 @@ sgxDoneSolid(PixmapPtr pPixmap)
 	PVR_ASSERT(gsSolidOp.pPixmap == pPixmap);
 
 	sgxSolidNextBatch(pScrn, pPVR, TRUE);
-	sgxWaitPixmap(pPixmap);
+
+	setPixmapOnGPU(pPixmap);
+	flushScanout(pPixmap);
 
 	gsSolidOp.softFallback.psGC = NULL;
 	gsSolidOp.pPixmap = NULL;
@@ -1195,7 +1217,9 @@ sgxDoneCopy(PixmapPtr pPixmap)
 	PVR_ASSERT(gsCopy2DOp.renderOp.pDest == pPixmap);
 
 	sgxCopyNextBatch(pPixmap->drawable.pScreen, TRUE);
-	sgxWaitPixmap(pPixmap);
+
+	setPixmapOnGPU(pPixmap);
+	flushScanout(pPixmap);
 
 	gsCopy2DOp.renderOp.pSrc = NULL;
 	gsCopy2DOp.renderOp.pDest = NULL;
