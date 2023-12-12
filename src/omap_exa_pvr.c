@@ -1708,14 +1708,8 @@ sgxAccelInit(ScreenPtr pScreen, PVRPtr pPVR, int fd)
 		return FALSE;
 	}
 
-	if (!PVRUseInit(pScreen, pPVR)) {
+	if (!PVRUseInit(pScreen, pPVR))
 		return FALSE;
-	}
-
-#if 0
-	result = PVRRenderInit(pScreen, pPVR);
-
-#endif
 
 	return TRUE;
 
