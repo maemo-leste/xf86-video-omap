@@ -1,3 +1,11 @@
+xf86-video-omap (0.7.0) unstable; urgency=medium
+
+  * EXA: PVR: Add HW compositing (currently disabled)
+  * EXA: PVR: Allocate BOs with page aligned size
+  * EXA: PVR: Implement basic pixmap ownership (CPU/GPU) tracking
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Tue, 12 Dec 2023 11:10:21 +0200
+
 xf86-video-omap (0.6.3) unstable; urgency=medium
 
   * PVR: EXA: Do not wait for blits to complete on scanout buffer
