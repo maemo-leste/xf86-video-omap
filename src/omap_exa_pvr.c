@@ -160,16 +160,24 @@ sgxWaitPixmap(PixmapPtr pPixmap)
 {
 	OMAPPixmapPrivPtr pixmapPriv;
 	PrivPixmapPtr priv;
+	ScrnInfoPtr pScrn;
+	OMAPPtr pOMAP;
 
 	if (!pPixmap)
 		return;
 
+	pScrn = pix2scrn(pPixmap);
+	pOMAP = OMAPPTR(pScrn);
 	pixmapPriv = exaGetPixmapDriverPrivate(pPixmap);
 	priv = pixmapPriv->priv;
 
-	if (priv && priv->is_gpu) {
+	if (priv) {
+		if (priv->is_gpu &&
+		    (pixmapPriv->bo != pOMAP->scanout || pOMAP->ManualUpdate)) {
+			waitForBlitsCompleteOnDeviceMem(pPixmap);
+		}
+
 		priv->is_gpu = FALSE;
-		waitForBlitsCompleteOnDeviceMem(pPixmap);
 	}
 }
 
