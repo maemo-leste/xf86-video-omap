@@ -1735,21 +1735,14 @@ sgxPrepareAccess(PixmapPtr pPixmap, int index)
 {
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 
-	if (!pPixmap->devPrivate.ptr) {
-		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
-		if (!pPixmap->devPrivate.ptr) {
-			return FALSE;
-		}
-	}
+	pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+
+	if (!pPixmap->devPrivate.ptr)
+		return FALSE;
 
 	sgxWaitPixmap(pPixmap);
 
 	return TRUE;
-}
-
-static void
-sgxFinishAccess(PixmapPtr pPixmap, int index)
-{
 }
 
 _X_EXPORT OMAPEXAPtr
@@ -1796,7 +1789,7 @@ InitPowerVREXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 	exa->DestroyPixmap = sgxDestroyPixmap;
 	exa->ModifyPixmapHeader = sgxModifyPixmapHeader;
 	exa->PrepareAccess = sgxPrepareAccess;
-	exa->FinishAccess = sgxFinishAccess;
+	exa->FinishAccess = OMAPFinishAccess;
 	exa->PixmapIsOffscreen = OMAPPixmapIsOffscreen;
 	exa->PrepareSolid = sgxPrepareSolid;
 	exa->Solid = sgxSolid;
