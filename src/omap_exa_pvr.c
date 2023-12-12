@@ -517,7 +517,7 @@ sgxModifyPixmapHeader(PixmapPtr pPixmap, int width, int height, int depth,
 	pPixmap->devKind = OMAPCalculateStride(width, bitsPerPixel);
 	size = pPixmap->devKind * height;
 
-	if ((!priv->bo) || (omap_bo_size(priv->bo) != size)) {
+	if ((!priv->bo) || (omap_bo_size(priv->bo) < size)) {
 		struct omap_bo *bo;
 
 		if (sgxBoCachePut(pScreen, priv->bo, priv->priv)) {
@@ -528,6 +528,7 @@ sgxModifyPixmapHeader(PixmapPtr pPixmap, int width, int height, int depth,
 		bo = sgxBoCacheGet(pScreen, size, &priv->priv);
 
 		if (!bo) {
+			size = (size + (4096 - 1)) & ~(4096 - 1);
 			sgxUnmapPixmapBo(pScreen, priv);
 			omap_bo_del(priv->bo);
 			priv->bo = omap_bo_new(pOMAP->dev, size, OMAP_BO_WC);
