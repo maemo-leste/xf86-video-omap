@@ -1,3 +1,9 @@
+xf86-video-omap (0.7.1) unstable; urgency=medium
+
+  * OMAPPlatformProbe: use ODEV_ATTRIB_DRIVER instead of ODEV_ATTRIB_BUSID
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Wed, 08 Jan 2025 12:09:12 +0200
+
 xf86-video-omap (0.7.0) unstable; urgency=medium
 
   * EXA: PVR: Add HW compositing (currently disabled)
