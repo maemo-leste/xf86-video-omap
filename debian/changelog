@@ -1,3 +1,9 @@
+xf86-video-omap (0.8.0) unstable; urgency=medium
+
+  * Add support for XF86_PDEV_SERVER_FD
+
+ -- Ivaylo Dimitrov <ivo.g.dimitrov.75@gmail.com>  Sun, 12 Jan 2025 16:28:33 +0200
+
 xf86-video-omap (0.7.0) unstable; urgency=medium
 
   * EXA: PVR: Add HW compositing (currently disabled)
