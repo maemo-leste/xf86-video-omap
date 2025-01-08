@@ -1101,13 +1101,14 @@ OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
 {
 	ScrnInfoPtr pScrn = NULL;
 	Bool foundScreen = FALSE;
-	char *busid = xf86_get_platform_device_attrib(dev, ODEV_ATTRIB_BUSID);
+	const char *driver;
 	int fd;
 
-	if (strncmp(busid, "omapdrm", 7))
+	driver = xf86_get_platform_device_attrib(dev, ODEV_ATTRIB_DRIVER);
+	if (!driver || strncmp(driver, "omapdrm", 7))
 		return FALSE;
 
-	fd = drmOpen(NULL, busid);
+	fd = drmOpen(driver, NULL);
 	if (fd != -1) {
 		drmClose(fd);
 
