@@ -59,7 +59,16 @@ static Bool OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
 		struct xf86_platform_device *dev, intptr_t match_data);
 #endif
 
-
+static Bool
+OMAPDriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
+{
+    switch (op) {
+    case SUPPORTS_SERVER_FDS:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
 
 /**
  * A structure used by the XFree86 code when loading this driver, so that it
@@ -71,11 +80,15 @@ _X_EXPORT DriverRec OMAP = {
 		OMAP_VERSION,
 		(char *)OMAP_DRIVER_NAME,
 		OMAPIdentify,
+#ifdef XSERVER_PLATFORM_BUS
+		NULL,
+#else
 		OMAPProbe,
+#endif
 		OMAPAvailableOptions,
 		NULL,
 		0,
-		NULL,
+		OMAPDriverFunc,
 #ifdef XSERVER_LIBPCIACCESS
 		NULL,
 		NULL,
@@ -513,11 +526,19 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 
 #ifdef XSERVER_PLATFORM_BUS
 	if (pEnt->location.type == BUS_PLATFORM) {
-		char *busid = xf86_get_platform_device_attrib(pEnt->location.id.plat,
-				ODEV_ATTRIB_BUSID);
-		pOMAP->drmFD = drmOpen(NULL, busid);
-		if (pOMAP->drmFD < 0)
-			goto fail;
+#ifdef XF86_PDEV_SERVER_FD
+		if (pEnt->location.id.plat->flags & XF86_PDEV_SERVER_FD) {
+			pOMAP->drmFD = xf86_platform_device_odev_attributes(pEnt->location.id.plat)->fd;
+
+		} else
+#endif
+		{
+			char *busid = xf86_get_platform_device_attrib(pEnt->location.id.plat,
+								      ODEV_ATTRIB_BUSID);
+			pOMAP->drmFD = drmOpen(NULL, busid);
+			if (pOMAP->drmFD < 0)
+				goto fail;
+		}
 		pOMAP->deviceName = drmGetDeviceNameFromFd(pOMAP->drmFD);
 	}
 	else
@@ -1015,13 +1036,19 @@ OMAPEnterVT(VT_FUNC_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int ret;
 
 	TRACE_ENTER();
 
-	ret = drmSetMaster(pOMAP->drmFD);
-	if (ret) {
-		ERROR_MSG("Cannot get DRM master: %s\n", strerror(ret));
+#ifdef XF86_PDEV_SERVER_FD
+	if (!(pOMAP->pEntityInfo->location.type == BUS_PLATFORM &&
+	      pOMAP->pEntityInfo->location.id.plat->flags & XF86_PDEV_SERVER_FD))
+
+#endif
+	{
+		int ret = drmSetMaster(pOMAP->drmFD);
+		if (ret) {
+			ERROR_MSG("Cannot get DRM master: %s\n", strerror(ret));
+		}
 	}
 
 	if (!xf86SetDesiredModes(pScrn)) {
@@ -1032,8 +1059,6 @@ OMAPEnterVT(VT_FUNC_ARGS_DECL)
 	TRACE_EXIT();
 	return TRUE;
 }
-
-
 
 /**
  * The driver's LeaveVT() function.  This is called when the X server
@@ -1048,6 +1073,13 @@ OMAPLeaveVT(VT_FUNC_ARGS_DECL)
 	int ret;
 
 	TRACE_ENTER();
+
+#ifdef XF86_PDEV_SERVER_FD
+	if ((pOMAP->pEntityInfo->location.type == BUS_PLATFORM &&
+	     pOMAP->pEntityInfo->location.id.plat->flags & XF86_PDEV_SERVER_FD)) {
+		return;
+	}
+#endif
 
 	ret = drmDropMaster(pOMAP->drmFD);
 	if (ret) {
@@ -1107,10 +1139,17 @@ OMAPPlatformProbe(DriverPtr drv, int entity_num, int flags,
 	if (strncmp(busid, "omapdrm", 7))
 		return FALSE;
 
-	fd = drmOpen(NULL, busid);
+#ifdef XF86_PDEV_SERVER_FD
+	if (dev->flags & XF86_PDEV_SERVER_FD)
+		fd = xf86_get_platform_device_int_attrib(dev, ODEV_ATTRIB_FD, -1);
+	else
+#endif
+	{
+		fd = drmOpen(NULL, busid);
+		if (fd != -1)
+			drmClose(fd);
+	}
 	if (fd != -1) {
-		drmClose(fd);
-
 		pScrn = xf86AllocateScreen(drv, 0);
 		if (!pScrn) {
 			EARLY_ERROR_MSG("Cannot allocate a ScrnInfoPtr");
