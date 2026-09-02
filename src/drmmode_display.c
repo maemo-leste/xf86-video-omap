@@ -372,6 +372,30 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		drmmode_reallocate_scanout(pScrn, TRUE, crtc);
 	}
 
+	if (drmmode->fb_id) {
+		uint32_t fb_id;
+		uint32_t crtc_id = drmmode_crtc->mode_crtc->crtc_id;
+		drmModeCrtcPtr mode_crtc = drmModeGetCrtc(drmmode->fd, crtc_id);
+
+		if (!mode_crtc) {
+			ERROR_MSG("failed to get mode: %s", strerror(errno));
+			return FALSE;
+		}
+
+		fb_id = mode_crtc->buffer_id;
+		drmModeFreeCrtc(mode_crtc);
+
+		if (fb_id != drmmode->fb_id) {
+			ret = drmModeSetCrtc(drmmode->fd, crtc_id, 0, 0, 0,
+						NULL, 0, NULL);
+			if (ret) {
+				ERROR_MSG("failed to reset mode: %s",
+						strerror(-ret));
+				return FALSE;
+			}
+		}
+	}
+
 	/* note: this needs to be done before setting the mode, otherwise
 	 * drm core will reject connecting the fb to crtc due to mismatched
 	 * dimensions:
@@ -1192,7 +1216,7 @@ drmmode_reallocate_scanout(ScrnInfoPtr pScrn, Bool redraw, xf86CrtcPtr crtc)
 			int i;
 			DEBUG_MSG("restoring CRTCs");
 			for (i = 0; i < config->num_crtc; i++) {
-				if (config->crtc[i] != crtc) {
+				if (config->crtc[i] != crtc && config->crtc[i]->enabled) {
 					int ret;
 					DEBUG_MSG("restore CRTC %d", i);
 					ret = drmmode_restore_crtc(config->crtc[i]);
